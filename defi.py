@@ -222,6 +222,13 @@ class VerusDeFiManager:
 
         All conversions in the same block are MEV-free — solved simultaneously
         at one price in all directions with zero spread.
+
+        Note
+        ----
+        ``sendcurrency`` returns an **opid** (operation ID), not a txid.
+        The opid is stored in ``DeFiOperationResult.txid`` for convenience
+        but callers should poll ``z_getoperationstatus`` to await the
+        actual on-chain transaction and retrieve the real txid.
         """
         dest = destination or self.destination_address
         if not dest:
@@ -243,16 +250,16 @@ class VerusDeFiManager:
             output["vdxftag"] = vdxf_tag
 
         try:
-            txid = await self.cli.sendcurrency(dest, [output])
+            opid = await self.cli.sendcurrency(dest, [output])
             logger.info(
-                "Conversion: %.4f %s → %s (via %s) txid=%s",
-                amount, from_currency, to_currency, via or "direct", txid,
+                "Conversion: %.4f %s → %s (via %s) opid=%s",
+                amount, from_currency, to_currency, via or "direct", opid,
             )
             return DeFiOperationResult(
                 operation="convert",
                 success=True,
-                txid=txid if isinstance(txid, str) else str(txid),
-                data={"output": output},
+                txid=opid if isinstance(opid, str) else str(opid),
+                data={"output": output, "is_opid": True},
             )
         except VerusError as exc:
             logger.error("Conversion failed: %s", exc)
@@ -268,7 +275,17 @@ class VerusDeFiManager:
         from_address: Optional[str] = None,
         vdxf_tag: Optional[Dict[str, str]] = None,
     ) -> DeFiOperationResult:
-        """Send currency without conversion."""
+        """Send currency without conversion.
+
+        Note
+        ----
+        ``sendcurrency`` returns an **opid**, not a txid.  The opid is stored
+        in ``DeFiOperationResult.txid``.  Poll ``z_getoperationstatus`` to
+        track completion and obtain the actual txid.
+
+        Memos (``memo`` field in outputs) only work when sending to
+        z-addresses (``zs...``).  Transparent addresses silently ignore memos.
+        """
         sender = from_address or self.destination_address
         output: Dict[str, Any] = {
             "currency": currency,
@@ -279,18 +296,55 @@ class VerusDeFiManager:
             output["vdxftag"] = vdxf_tag
 
         try:
-            txid = await self.cli.sendcurrency(sender, [output])
+            opid = await self.cli.sendcurrency(sender, [output])
             return DeFiOperationResult(
                 operation="send",
                 success=True,
-                txid=txid if isinstance(txid, str) else str(txid),
-                data={"output": output},
+                txid=opid if isinstance(opid, str) else str(opid),
+                data={"output": output, "is_opid": True},
             )
         except VerusError as exc:
             logger.error("Send failed: %s", exc)
             return DeFiOperationResult(
                 operation="send", success=False, error=str(exc),
             )
+
+    # ------------------------------------------------------------------
+    # Opid tracking helper
+    # ------------------------------------------------------------------
+
+    async def await_opid(
+        self, opid: str, poll_interval: float = 5.0, max_polls: int = 120
+    ) -> Dict[str, Any]:
+        """
+        Poll ``z_getoperationstatus`` until *opid* resolves or times out.
+
+        Parameters
+        ----------
+        opid : str
+            Operation ID returned by ``sendcurrency`` or ``z_sendmany``.
+        poll_interval : float
+            Seconds between polls (default 5s).
+        max_polls : int
+            Maximum number of polls before giving up (default 120 = 10 min).
+
+        Returns
+        -------
+        dict
+            The final operation status dict.  On success it contains
+            ``{"status": "success", "result": {"txid": "..."}, ...}``.
+        """
+        import asyncio
+
+        for _ in range(max_polls):
+            statuses = await self.cli.z_getoperationstatus([opid])
+            if statuses:
+                status = statuses[0]
+                if status.get("status") in ("success", "failed", "cancelled"):
+                    return status
+            await asyncio.sleep(poll_interval)
+
+        return {"status": "timeout", "id": opid}
 
     # ------------------------------------------------------------------
     # Currency launch

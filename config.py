@@ -38,6 +38,164 @@ CURRENCY_IDS = {
 }
 
 # ---------------------------------------------------------------------------
+# Ethereum Bridge Contract Addresses (updated March 2026)
+# WARNING: Previous addresses (0x1Af5b8015C64d39Ab44C60EAd8317f9F5a9B6C4C
+#          and 0x0200EbbD26467B866120D84A0d37c82CdE0acAEB) are DEPRECATED.
+#          Using old addresses will send funds to deprecated/defunct contracts.
+# ---------------------------------------------------------------------------
+ETH_BRIDGE_CONTRACTS = {
+    "delegator": "0xBc2738BA63882891094C99E59a02141Ca1A1C36a",
+    "verus_bridge": "0xE6052Dcc60573561ECef2D9A4C0FEA6d3aC5B9A2",
+}
+
+# ---------------------------------------------------------------------------
+# Protocol Facts (from Verus Facts and Statistics — Wiki Update March 2026)
+# ---------------------------------------------------------------------------
+PROTOCOL_FACTS = {
+    "block_time_seconds": 60,           # ~60s (not ~62s as previously documented)
+    "blocks_per_day": 1440,             # 60s × 1440 = 86400s = 24h
+    "mining_algorithm": "VerusHash 2.2",  # NOT 2.0 — version 2.2 is deployed
+    "consensus": "Verus Proof of Power (50% PoW / 50% PoS)",
+    "max_supply": 83_540_184,           # VRSC
+    "block_reward": 24,                 # VRSC per block (as of block ~3.9M)
+    "halving_interval": "~2 years",
+    "transaction_fee": 0.0001,          # VRSC
+    "launch_date": "2018-05-21",
+    "launch_type": "Fair launch — no ICO, no premine, no dev tax",
+    "license": "MIT",
+    "cli_commands": 201,                # across 14 categories
+    "root_id_cost_vrsc": 100,           # ~80 with referral
+    "subid_min_cost_vrsc": 0.01,
+    "conversion_fee": 0.00025,          # 0.025% basket↔reserve
+    "pbaas_launch_cost_vrsc": 10_000,
+}
+
+# ---------------------------------------------------------------------------
+# getinfo Response Fields (13 newly documented — Wiki Update March 2026)
+# These fields are returned by the ``getinfo`` RPC call but were previously
+# undocumented.  Useful for node diagnostics and chain introspection.
+# ---------------------------------------------------------------------------
+GETINFO_EXTRA_FIELDS = {
+    "tiptime": "Timestamp of the chain tip (epoch seconds)",
+    "nextblocktime": "Expected next block timestamp",
+    "CCid": "Consensus branch ID",
+    "p2pport": "P2P network port",
+    "rpcport": "RPC server port",
+    "magic": "Network magic bytes (hex string)",
+    "premine": "Premine amount",
+    "eras": "Number of reward eras",
+    "reward": "Current block reward (satoshis)",
+    "halving": "Halving interval (blocks)",
+    "decay": "Decay parameter",
+    "endsubsidy": "Block height where subsidy ends",
+    "veruspos": "VerusPoS configuration value",
+}
+
+# ---------------------------------------------------------------------------
+# definecurrency — PBaaS Notary Parameters (Wiki Update March 2026)
+# ---------------------------------------------------------------------------
+DEFINECURRENCY_PBAAS_PARAMS = {
+    "notaries": "Array of notary identity names for PBaaS chain validation (e.g. [\"notary1@\", \"notary2@\"])",
+    "minnotariesconfirm": "Minimum unique notary signatures required for confirmation (integer)",
+}
+
+# ---------------------------------------------------------------------------
+# Webhook vs Redirect VDXF Key for Login (verus-connect analysis, March 2026)
+# ---------------------------------------------------------------------------
+# CRITICAL: When constructing a VerusID login challenge ``redirect_uri``,
+# the VDXF key determines HOW the wallet sends back the signed response.
+#
+#   LOGIN_CONSENT_WEBHOOK_VDXF_KEY  → wallet POSTs response to server (server-to-server)
+#   LOGIN_CONSENT_REDIRECT_VDXF_KEY → wallet redirects user's browser to callback URL
+#
+# USE WEBHOOK for all new code. The Redirect key only works with Verus Mobile;
+# the Verus Web Wallet extension rejects challenges with the Redirect key,
+# returning "No webhook URI found in challenge."  verus-connect uses Webhook
+# automatically.
+LOGIN_VDXF_KEY_USAGE = {
+    "webhook": {
+        "key": "LOGIN_CONSENT_WEBHOOK_VDXF_KEY",
+        "i_address": "i61GGEtjHTjFKJkz5ykLNATUBsjVi8XVvN",
+        "behavior": "Wallet POSTs signed response directly to server (works with ALL wallets)",
+    },
+    "redirect": {
+        "key": "LOGIN_CONSENT_REDIRECT_VDXF_KEY",
+        "i_address": "i4VoSEihPNEGbqW8tcrmDs5BF5oLPFRCNp",
+        "behavior": "Wallet redirects user's browser (Verus Mobile ONLY — fails on web extension)",
+    },
+}
+
+# ---------------------------------------------------------------------------
+# Verus Web Wallet Extension Provider API (window.verus)
+# ---------------------------------------------------------------------------
+# The Verus Web Wallet browser extension injects ``window.verus`` and
+# dispatches a ``verus#initialized`` event when ready.  This provider
+# allows direct login and send operations without QR codes.
+#
+# Provider interface (TypeScript source from verus-connect):
+#   window.verus.isVerusWallet  → true
+#   window.verus.version        → string
+#   window.verus.requestLogin(uri: string)        → wallet opens approval popup
+#   window.verus.sendDeeplink(uri: string)         → wallet processes deep link
+#   window.verus.sendTransaction({ to, amount, currency? }) → { txid: string }
+#
+# Detection: check ``window.verus?.isVerusWallet`` or listen for
+#            ``verus#initialized`` event (give ~500ms for injection).
+WEB_WALLET_EXTENSION_PROVIDER = {
+    "global_var": "window.verus",
+    "ready_event": "verus#initialized",
+    "methods": ["requestLogin", "sendDeeplink", "sendTransaction"],
+    "detection_timeout_ms": 500,
+}
+
+# ---------------------------------------------------------------------------
+# Deep Link Schemes (from verus-connect deeplink.ts)
+# ---------------------------------------------------------------------------
+# Only these URI schemes are safe for deep links.  Reject javascript:, data:, etc.
+DEEP_LINK_SCHEMES = ["verus:", "vrsc:", "i5jtwbp6zymeay9llnraglgjqgdrffsau4:"]
+VERUSPAY_DEEP_LINK_SCHEME = "i5jtwbp6zymeay9llnraglgjqgdrffsau4"
+
+# ---------------------------------------------------------------------------
+# Wallet Environment Detection (from verus-connect detect.ts)
+# ---------------------------------------------------------------------------
+# The verus-connect frontend SDK auto-detects how to present login:
+#   extension → window.verus provider present → send challenge directly
+#   mobile    → user-agent is mobile browser  → deep link (verus://)
+#   desktop   → neither of the above          → QR code for Verus Mobile to scan
+WALLET_ENVIRONMENTS = ["extension", "mobile", "desktop"]
+
+# ---------------------------------------------------------------------------
+# verus-connect Library Reference
+# ---------------------------------------------------------------------------
+# Drop-in VerusID login for websites.  Server middleware + frontend SDK.
+# Repo: https://github.com/Fried333/verus-connect
+# Install: npm install verus-connect express
+#          npm install git+https://github.com/VerusCoin/verusid-ts-client.git
+VERUS_CONNECT_LIBRARY = {
+    "repo": "https://github.com/Fried333/verus-connect",
+    "npm_package": "verus-connect",
+    "version": "0.1.0",
+    "server_import": "verus-connect/server",
+    "client_import": "verus-connect",
+    "peer_deps": ["express>=4.0.0", "verusid-ts-client (GitHub)"],
+    "server_routes": [
+        "POST /login            — Create signed login challenge",
+        "POST /verusidlogin     — Receives signed response from wallet",
+        "GET  /result/:id       — Frontend polls for result",
+        "POST /pay-deeplink     — Generate VerusPay invoice deep link",
+        "GET  /health           — Health check",
+    ],
+}
+
+# ---------------------------------------------------------------------------
+# Memo Limitation (Wiki Update March 2026)
+# ---------------------------------------------------------------------------
+# IMPORTANT: ``memo`` field in sendcurrency outputs ONLY works when sending
+# to z-addresses (shielded addresses starting with ``zs...``).
+# Transparent addresses (``R...``) silently ignore the memo field.
+MEMO_REQUIRES_Z_ADDRESS = True
+
+# ---------------------------------------------------------------------------
 # Minimum daemon version (v1.2.14-2 mandatory upgrade — Jan 7, 2026)
 # ---------------------------------------------------------------------------
 MIN_DAEMON_VERSION = 1021400  # 1.2.14 → encoded as int (revision handled separately)

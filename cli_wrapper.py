@@ -233,8 +233,29 @@ class VerusCLI:
         from_address: str,
         outputs: List[Dict[str, Any]],
     ) -> str:
+        """Send currency (payment, conversion, or cross-chain export).
+
+        IMPORTANT: Returns an **opid** (operation ID), NOT a txid.
+        To get the actual txid, poll ``z_getoperationstatus(['opid'])``
+        until status is 'success', then read result.txid.
+
+        Parameters
+        ----------
+        from_address : str
+            Source address or ``"*"`` for wildcard (any available funds).
+        outputs : list[dict]
+            Array of output descriptors: ``{address, amount, currency, ...}``.
+            Optional keys: ``convertto``, ``via``, ``exportto``, ``memo``
+            (memo only works when sending to z-addresses), ``vdxftag``.
+
+        Returns
+        -------
+        str
+            An opid string (e.g. ``"opid-abcd-1234-..."``).  Poll
+            ``z_getoperationstatus`` to track completion and retrieve txid.
+        """
         r = await self.call("sendcurrency", [from_address, json.dumps(outputs)])
-        return r.result  # txid
+        return r.result  # opid — poll z_getoperationstatus for txid
 
     async def getcurrency(self, currency_name: str) -> Dict[str, Any]:
         r = await self.call("getcurrency", [currency_name])
@@ -255,9 +276,18 @@ class VerusCLI:
         r = await self.call("getvdxfid", [vdxf_uri])
         return r.result
 
-    async def signmessage(self, identity: str, message: str) -> str:
+    async def signmessage(self, identity: str, message: str) -> Dict[str, str]:
+        """Sign a message with a VerusID.
+
+        Returns
+        -------
+        dict
+            JSON object ``{"hash": "<hexhash>", "signature": "<base64sig>"}``.
+            NOTE: This is NOT a plain base64 string — it's a JSON object
+            with both the hash of the signed message and the signature.
+        """
         r = await self.call("signmessage", [identity, message])
-        return r.result
+        return r.result  # {"hash": "...", "signature": "..."}
 
     async def verifymessage(self, identity: str, signature: str, message: str) -> bool:
         r = await self.call("verifymessage", [identity, signature, message])
@@ -290,14 +320,41 @@ class VerusCLI:
         r = await self.call("z_listaddresses")
         return r.result
 
-    async def makeoffer(self, offer_json: Dict[str, Any]) -> Dict[str, Any]:
-        """Create a marketplace offer (VerusID Marketplace)."""
-        r = await self.call("makeoffer", [json.dumps(offer_json)])
+    async def makeoffer(
+        self, fromaddress: str, offer_json: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Create a marketplace offer (VerusID Marketplace).
+
+        Parameters
+        ----------
+        fromaddress : str
+            Address or VerusID funding the offer (e.g. ``"youragent@"``).
+        offer_json : dict
+            Offer specification: ``{"changeaddress", "offer": {...}, "for": {...}}``.
+        """
+        r = await self.call("makeoffer", [fromaddress, json.dumps(offer_json)])
         return r.result
 
-    async def takeoffer(self, offer_txid: str, identity_json: Dict[str, Any]) -> Dict[str, Any]:
-        """Accept a marketplace offer."""
-        r = await self.call("takeoffer", [offer_txid, json.dumps(identity_json)])
+    async def takeoffer(
+        self, fromaddress: str, offer_json: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Accept a marketplace offer.
+
+        Parameters
+        ----------
+        fromaddress : str
+            Address or VerusID accepting the offer.
+        offer_json : dict
+            Acceptance spec — the offer txid goes INSIDE this JSON:
+            ``{"txid": "OFFER_TXID", "changeaddress": "...",
+               "deliver": {...}, "accept": {...}}``.
+
+        Note
+        ----
+        The offer txid is NOT a separate parameter — it is a field
+        inside ``offer_json``.  This differs from some older documentation.
+        """
+        r = await self.call("takeoffer", [fromaddress, json.dumps(offer_json)])
         return r.result
 
     async def getoffers(

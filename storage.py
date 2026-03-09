@@ -9,6 +9,8 @@ VerusID contentmultimap with three proven storage methods:
        Uses ``contentmultimap.data.filename`` to trigger signdata + MMR.
     2. **sendcurrency to z-address** — Built-in Sapling encryption, private
        access control. ~10.3 VRSCTEST/999KB. Async via opid.
+       **Memo fields only work with z-addresses** — transparent addresses
+       silently ignore them.  ``sendcurrency`` returns an opid, not a txid.
     3. **Raw contentmultimap** — Direct hex storage. Near-free (~0.0001 tx fee).
        **Hard limit: ~5KB** — data above this is silently truncated.
 
@@ -451,6 +453,11 @@ class VerusStorageManager:
         - Cost: ~10.3 VRSCTEST per 999KB chunk
         - NOT linked to identity (manual tracking required)
         - Built-in Sapling encryption (no additional encryption needed)
+        - ``sendcurrency`` returns an **opid** (not a txid) — poll
+          ``z_getoperationstatus`` to track completion
+        - **IMPORTANT**: ``memo`` fields in sendcurrency outputs ONLY work
+          when the destination is a z-address (``zs...``).  Transparent
+          addresses (``R...``) silently ignore memo data.
         """
         try:
             with open(file_path, "rb") as f:
