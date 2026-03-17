@@ -547,7 +547,7 @@ REFERENCE_LIBRARIES = {
     },
     "verus_typescript_primitives": {
         "package": "verus-typescript-primitives",
-        "github": "https://github.com/AuraSoldique/verus-typescript-primitives",
+        "github": "https://github.com/VerusCoin/verus-typescript-primitives",
         "purpose": "Core data types: GenericRequest/Response, VDXF, Identity, PBaaS, Offers",
         "key_classes_new_login": [
             "GenericRequest / GenericResponse — new envelope-based request/response",

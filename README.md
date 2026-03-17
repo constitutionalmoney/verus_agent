@@ -155,6 +155,12 @@ pip install -e .
 pytest tests/          # unit tests use mocks, no daemon required
 ```
 
+Upstream contract checks:
+
+- `tests/test_primitives_upstream_contract.py` is tagged with the `upstream_contract` marker.
+- It auto-skips when `verus-typescript-primitives/` is not cloned beside this repo.
+- Run only these checks with `pytest -m upstream_contract`.
+
 Coverage exceeds 90 % for core and extension modules.
 
 ---

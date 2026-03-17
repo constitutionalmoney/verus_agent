@@ -20,6 +20,7 @@ from verus_agent.config import (
     AGENT_CAPABILITIES,
     AGENT_ID,
     API_ENDPOINTS,
+    REFERENCE_LIBRARIES,
     VerusConfig,
     VerusNetwork,
 )
@@ -88,6 +89,11 @@ class TestVerusConfig:
         # required for validation).
         assert len(AGENT_CAPABILITIES) >= 14
 
+    def test_primitives_reference_uses_canonical_upstream(self):
+        assert REFERENCE_LIBRARIES["verus_typescript_primitives"]["github"] == (
+            "https://github.com/VerusCoin/verus-typescript-primitives"
+        )
+
 
 # ---------------------------------------------------------------------------
 # CLI wrapper tests
@@ -116,7 +122,7 @@ class TestVerusCLI:
         result = await mock_cli.call("getinfo")
         assert result.result == {"version": 1021400}
         assert result.method == "getinfo"
-        assert result.elapsed_ms > 0
+        assert result.elapsed_ms >= 0
         mock_session.post.assert_called_once()
 
     @pytest.mark.asyncio

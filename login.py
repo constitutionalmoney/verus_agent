@@ -79,6 +79,16 @@ QR Code Generation & UTXO Transaction Construction:
             identity: CompactIAddressObject
         }
 
+        Interop notes from verus-typescript-primitives updates (March 2026)::
+
+                - requestID is optional in AuthenticationRequestDetails.toJson().
+                    Consumers should accept login payloads without requestid.
+                - RecipientConstraint helpers now support explicit rootSystemName for
+                    FQN-derived constraints. Set it explicitly when building mixed
+                    mainnet/testnet login flows.
+                - Address helper APIs now expose fqnToParentFqn and
+                    fqnToParentAddress for parent resolution.
+
     Additional capabilities in GenericRequest::
 
         AppEncryptionRequestDetails  — Request encrypted derived seed from wallet
