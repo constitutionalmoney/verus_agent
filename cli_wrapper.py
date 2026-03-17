@@ -170,11 +170,15 @@ class VerusCLI:
         self._call_count += 1
         self._total_latency_ms += elapsed
 
+        # Preserve non-zero latency for successful calls even when execution is
+        # faster than the current reporting precision.
+        elapsed_ms = max(0.01, round(elapsed, 2))
+
         return CLIResult(
             method=method,
             params=params,
             result=result["parsed"],
-            elapsed_ms=round(elapsed, 2),
+            elapsed_ms=elapsed_ms,
             raw=result.get("raw", ""),
         )
 

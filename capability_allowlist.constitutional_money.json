@@ -1,0 +1,70 @@
+{
+  "profile": "constitutional_money",
+  "description": "Allowlist profile for Constitutional Money issuance/redemption operations with strict separation from generic Verus workflows.",
+  "policy": {
+    "generic_verus_operations_default": "deny",
+    "intended_use": "Minting/issuance controls, redemption lifecycle, identity and ledger verification for Constitutional Money."
+  },
+  "allowed_capabilities": [
+    "verus.cli.execute",
+    "verus.identity.create",
+    "verus.identity.update",
+    "verus.identity.vault",
+    "verus.currency.send",
+    "verus.currency.estimate",
+    "verus.storage.store",
+    "verus.storage.retrieve",
+    "verus.storage.store_data_wrapper",
+    "verus.storage.retrieve_data_wrapper",
+    "verus.login.authenticate",
+    "verus.login.validate"
+  ],
+  "allowed_cli_methods": [
+    "getinfo",
+    "getblockcount",
+    "getidentity",
+    "getidentitycontent",
+    "getcurrencystate",
+    "estimateconversion",
+    "z_getoperationstatus"
+  ],
+  "domain_groups": {
+    "issuance_operations": {
+      "capabilities": [
+        "verus.identity.create",
+        "verus.identity.update",
+        "verus.identity.vault",
+        "verus.currency.send",
+        "verus.currency.estimate"
+      ],
+      "notes": [
+        "Use for controlled issuance workflows (inventory creation, identity updates, pricing checks).",
+        "Pair with explicit operator approval and downstream audit writes."
+      ]
+    },
+    "redemption_operations": {
+      "capabilities": [
+        "verus.currency.send",
+        "verus.storage.store",
+        "verus.storage.retrieve",
+        "verus.storage.store_data_wrapper",
+        "verus.storage.retrieve_data_wrapper"
+      ],
+      "notes": [
+        "Use for redemption settlement and receipt storage/retrieval workflows.",
+        "Prefer z-address flows when memo or encrypted data is required."
+      ]
+    },
+    "generic_verus_operations": {
+      "default_policy": "deny",
+      "examples_not_allowed": [
+        "verus.marketplace.*",
+        "verus.ip.*",
+        "verus.mobile.*",
+        "verus.defi.*",
+        "verus.market.monitor",
+        "verus.bridge.cross"
+      ]
+    }
+  }
+}

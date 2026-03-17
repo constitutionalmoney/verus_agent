@@ -1,0 +1,27 @@
+{
+  "description": "Default allowlist for automation-safe verus_agent task execution.",
+  "allowed_capabilities": [
+    "verus.cli.execute",
+    "verus.identity.create",
+    "verus.identity.update",
+    "verus.identity.vault",
+    "verus.currency.estimate",
+    "verus.currency.convert",
+    "verus.currency.send",
+    "verus.storage.store",
+    "verus.storage.retrieve",
+    "verus.storage.store_data_wrapper",
+    "verus.storage.retrieve_data_wrapper",
+    "verus.login.authenticate",
+    "verus.login.validate",
+    "verus.market.monitor"
+  ],
+  "allowed_cli_methods": [
+    "getinfo",
+    "getblockcount",
+    "getcurrencystate",
+    "getidentity",
+    "getidentitycontent",
+    "estimateconversion"
+  ]
+}
