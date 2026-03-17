@@ -660,6 +660,11 @@ class VerusAgentMarketplace:
         Create a marketplace offer to sell a license identity for payment.
 
         Uses Verus-native ``makeoffer`` — fully on-chain, trustless.
+
+        Note
+        ----
+        ``makeoffer`` takes ``fromaddress`` as its first parameter,
+        followed by the offer JSON.  The ``fromaddress`` funds the offer.
         """
         if not self.enabled:
             return MarketplaceResult(operation="create_offer", success=False, error="Marketplace disabled")
@@ -670,7 +675,8 @@ class VerusAgentMarketplace:
                 "offer": {"currency": offer_currency, "amount": offer_amount},
                 "for": {"name": for_identity},
             }
-            result = await self.cli.call("makeoffer", [json.dumps(params)])
+            # makeoffer API: first param = fromaddress, second = offer JSON
+            result = await self.cli.call("makeoffer", [seller_address, json.dumps(params)])
             txid = result.result if isinstance(result.result, str) else result.result.get("txid")
 
             return MarketplaceResult(

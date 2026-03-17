@@ -122,6 +122,72 @@ References:
     - https://github.com/VerusCoin/verusid-ts-client (TS client source)
     - https://github.com/VerusCoin/verus-typescript-primitives (core types)
     - https://github.com/VerusCoin/verusd-rpc-ts-client (RPC client — REQUIRED for login)
+    - https://github.com/Fried333/verus-connect (drop-in login SDK — server + frontend)
+
+verus-connect (March 2026 — from Fried333/verus-connect analysis):
+    Drop-in VerusID login library.  ``npm install verus-connect``
+
+    **Server** — Express middleware (~5 lines)::
+
+        const { verusAuth } = require('verus-connect/server');
+        app.use('/auth/verus', verusAuth({
+            iAddress: process.env.VERUS_ID,
+            privateKey: process.env.VERUS_WIF,
+            callbackUrl: 'https://mysite.com/auth/verus/verusidlogin',
+        }));
+
+    **Frontend** — Auto-detect wallet environment (~5 lines)::
+
+        const vc = new VerusConnect({ appName: 'My App', serverUrl: '/auth/verus' });
+        const result = await vc.login();
+        // result.iAddress, result.friendlyName, result.method
+
+    Auto-detects three wallet environments:
+        - **extension** — ``window.verus`` provider → sends challenge directly
+        - **mobile** — user-agent → deep link (``verus://``)
+        - **desktop** — QR code fallback → scan with Verus Mobile
+
+    ⚠️  WEBHOOK vs REDIRECT VDXF Key (CRITICAL for web wallet):
+        When constructing login challenges, the VDXF key in the ``redirect_uri``
+        determines how the wallet returns the signed response:
+
+        - ``LOGIN_CONSENT_WEBHOOK_VDXF_KEY``  → server-to-server POST (all wallets)
+        - ``LOGIN_CONSENT_REDIRECT_VDXF_KEY`` → browser redirect (Verus Mobile only)
+
+        The Verus Web Wallet extension **rejects** challenges using the Redirect key
+        with "No webhook URI found in challenge."  Always use the Webhook key.
+
+        verus-connect uses the Webhook key automatically::
+
+            // Correct — works with extension + mobile + desktop
+            new RedirectUri(callbackUrl, LOGIN_CONSENT_WEBHOOK_VDXF_KEY.vdxfid)
+
+            // FAILS on web wallet extension
+            new RedirectUri(callbackUrl, LOGIN_CONSENT_REDIRECT_VDXF_KEY.vdxfid)
+
+    Verus Web Wallet Extension Provider (``window.verus``)::
+
+        interface VerusProvider {
+            isVerusWallet: true;
+            version: string;
+            requestLogin(uri: string): Promise<unknown>;     // opens approval popup
+            sendDeeplink(uri: string): Promise<unknown>;      // processes deep link
+            sendTransaction({to, amount, currency?}): Promise<{txid: string}>;
+        }
+
+    Detection: check ``window.verus?.isVerusWallet`` or listen for the
+    ``verus#initialized`` event (give ~500ms for content script injection).
+
+    Identity display best practice (from verus-connect middleware)::
+
+        friendlyname > fullyqualifiedname > identity.name + '@'
+        # "alice@" preferred over "alice.VRSC@" — chain suffix is implied
+
+    VerusPay invoice deep links::
+
+        POST /auth/verus/pay-deeplink
+        Body: { address: "R...", amount: 1.5, currency_id?: "i5w5..." }
+        Returns: { deep_link: "i5jtwbp6zymeay9llnraglgjqgdrffsau4://..." }
 """
 
 from __future__ import annotations
