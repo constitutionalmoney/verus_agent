@@ -689,6 +689,10 @@ class VerusConfig:
     sleep_seconds: int = DEFAULT_SLEEP_SECONDS
     api_timeout: int = DEFAULT_API_TIMEOUT
 
+    # RPC authentication (for direct daemon or rust_verusd_rpc_server connections)
+    rpc_user: Optional[str] = None
+    rpc_password: Optional[str] = None
+
     # Agent registration
     agent_id: str = AGENT_ID
     agent_priority: int = 5
@@ -714,10 +718,17 @@ class VerusConfig:
             self.api_url = API_ENDPOINTS[self.network]
         # Environment overrides
         self.api_url = os.getenv("VERUS_API_URL", self.api_url)
+        # Also accept VERUS_RPC_URL as an alias for VERUS_API_URL
+        if "VERUS_RPC_URL" in os.environ and "VERUS_API_URL" not in os.environ:
+            self.api_url = os.environ["VERUS_RPC_URL"]
         self.verus_cli_path = os.getenv("VERUS_CLI_PATH", self.verus_cli_path)
         self.destination_address = os.getenv("VERUS_DESTINATION_ADDRESS", self.destination_address)
         self.uai_core_url = os.getenv("UAI_CORE_URL", self.uai_core_url)
         self.swarm_ws_url = os.getenv("UAI_SWARM_WS_URL", self.swarm_ws_url)
+
+        # RPC auth from environment
+        self.rpc_user = os.getenv("VERUS_RPC_USER", self.rpc_user)
+        self.rpc_password = os.getenv("VERUS_RPC_PASSWORD", self.rpc_password)
 
         # Extension env overrides
         self.security_level = os.getenv("VERUS_SECURITY_LEVEL", self.security_level)

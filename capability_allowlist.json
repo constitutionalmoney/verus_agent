@@ -2,6 +2,7 @@
   "description": "Default allowlist for automation-safe verus_agent task execution.",
   "allowed_capabilities": [
     "verus.cli.execute",
+    "verus.identity.get",
     "verus.identity.create",
     "verus.identity.update",
     "verus.identity.vault",

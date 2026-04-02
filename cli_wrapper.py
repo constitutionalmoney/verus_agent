@@ -462,10 +462,19 @@ class VerusCLI:
         return {"parsed": parsed, "raw": raw}
 
     async def _call_api(self, method: str, params: List[Any]) -> Dict[str, Any]:
-        """Execute via JSON-RPC HTTP API."""
+        """Execute via JSON-RPC HTTP API.
+
+        Supports optional Basic Auth for direct daemon / rust_verusd_rpc_server
+        connections.  When ``config.rpc_user`` and ``config.rpc_password`` are
+        set, requests include an Authorization header.
+        """
         if not self._session:
+            auth = None
+            if self.config.rpc_user and self.config.rpc_password:
+                auth = aiohttp.BasicAuth(self.config.rpc_user, self.config.rpc_password)
             self._session = aiohttp.ClientSession(
                 timeout=aiohttp.ClientTimeout(total=self.config.api_timeout),
+                auth=auth,
             )
 
         payload = {
