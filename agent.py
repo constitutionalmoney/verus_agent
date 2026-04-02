@@ -35,6 +35,12 @@ from verus_agent.defi import VerusDeFiManager
 from verus_agent.ip_protection import VerusIPProtection
 from verus_agent.login import VerusLoginManager
 from verus_agent.marketplace import VerusAgentMarketplace
+from verus_agent.mcp_client import (
+    MCPRouter,
+    MCPServerName,
+    MCP_EXCLUSIVE_TOOLS,
+    WRITE_CAPABILITIES,
+)
 from verus_agent.mobile import VerusMobileHelper
 from verus_agent.reputation import VerusReputationSystem
 from verus_agent.storage import VerusStorageManager
@@ -168,6 +174,9 @@ class VerusBlockchainAgent:
         self.ip_protection: Optional[VerusIPProtection] = None
         self.mobile_helper: Optional[VerusMobileHelper] = None
 
+        # MCP router (initialized in initialize() when enabled)
+        self.mcp_router: Optional[MCPRouter] = None
+
         # Learning & adaptation (matching Neural Swarm pattern)
         self.experience_history: List[Dict[str, Any]] = []
         self.learning_rate = 0.1
@@ -239,6 +248,10 @@ class VerusBlockchainAgent:
             # 4. Build capability dispatch table
             self._build_capability_handlers()
 
+            # 5. MCP router (optional — adds spending limits, audit, new tools)
+            if self.config.mcp_enabled:
+                await self._initialize_mcp()
+
             ext_status = []
             if self.swarm_security.is_enabled:
                 ext_status.append("swarm_security")
@@ -248,6 +261,8 @@ class VerusBlockchainAgent:
                 ext_status.append("ip_protection")
             if self.reputation.enabled:
                 ext_status.append("reputation")
+            if self.mcp_router and self.mcp_router.enabled:
+                ext_status.append("mcp")
 
             self.state = VerusAgentState.IDLE
             self.start_time = datetime.now()
@@ -286,6 +301,8 @@ class VerusBlockchainAgent:
         logger.info("Shutting down Verus agent...")
         self._running = False
         self.state = VerusAgentState.SHUTDOWN
+        if self.mcp_router:
+            await self.mcp_router.shutdown()
         if self.cli:
             await self.cli.close()
         logger.info("Verus agent shut down.")
@@ -314,11 +331,30 @@ class VerusBlockchainAgent:
         logger.info("Processing task %s: %s", task_id, capability)
 
         try:
-            handler = self._capability_handlers.get(capability)
-            if not handler:
-                raise ValueError(f"Unknown capability: {capability}")
+            # --- MCP routing: prefer MCP for safety-critical operations ---
+            mcp_result = None
+            if self.mcp_router and self.mcp_router.should_route_to_mcp(capability):
+                mcp_result = await self.mcp_router.route_capability(capability, dict(params))
 
-            result = await handler(**params)
+            if mcp_result is not None and mcp_result.success:
+                # MCP handled it successfully
+                result = mcp_result.content
+                if isinstance(result, str):
+                    result = {"result": result}
+                elif not isinstance(result, dict):
+                    result = {"result": result}
+                result["_routed_via"] = "mcp"
+            elif mcp_result is not None and not mcp_result.success and capability in WRITE_CAPABILITIES:
+                # Write operation failed via MCP — do NOT fall back (safety)
+                raise RuntimeError(
+                    f"MCP write operation failed (no CLI fallback for safety): {mcp_result.error}"
+                )
+            else:
+                # Direct CLI path (fallback or MCP not available)
+                handler = self._capability_handlers.get(capability)
+                if not handler:
+                    raise ValueError(f"Unknown capability: {capability}")
+                result = await handler(**params)
             elapsed = (time.monotonic() - start) * 1000
             self._total_processing_ms += elapsed
             self.tasks_completed += 1
@@ -396,6 +432,7 @@ class VerusBlockchainAgent:
                 "swarm_security": self.swarm_security.get_security_status() if self.swarm_security else {"enabled": False},
                 "marketplace": self.marketplace.get_marketplace_status() if self.marketplace else {"enabled": False},
                 "ip_protection": self.ip_protection.get_protection_status() if self.ip_protection else {"enabled": False},
+                "mcp": self.mcp_router.get_status() if self.mcp_router else {"enabled": False},
             },
         }
 
@@ -447,6 +484,80 @@ class VerusBlockchainAgent:
 
         self.accuracy_score = success_rate
         logger.debug("Adapted behavior: accuracy=%.3f, lr=%.4f", success_rate, self.learning_rate)
+
+    # ------------------------------------------------------------------
+    # Internal: MCP initialization
+    # ------------------------------------------------------------------
+
+    async def _initialize_mcp(self) -> None:
+        """Initialize the MCP router and register MCP-exclusive capabilities."""
+        # Parse server list from config
+        servers = None
+        if self.config.mcp_servers:
+            try:
+                servers = [
+                    MCPServerName(s.strip())
+                    for s in self.config.mcp_servers.split(",")
+                    if s.strip()
+                ]
+            except ValueError as exc:
+                logger.warning("Invalid MCP server name in config: %s", exc)
+                servers = None
+
+        # Build env overrides for MCP processes
+        env_overrides: Dict[str, str] = {}
+        if self.config.mcp_audit_dir:
+            env_overrides["VERUSIDX_AUDIT_DIR"] = self.config.mcp_audit_dir
+        if self.config.mcp_spending_limits_path:
+            env_overrides["VERUSIDX_SPENDING_LIMITS_PATH"] = self.config.mcp_spending_limits_path
+        if self.config.mcp_data_dir:
+            env_overrides["VERUSIDX_DATA_DIR"] = self.config.mcp_data_dir
+        if self.config.mcp_extra_chains:
+            env_overrides["VERUSIDX_EXTRA_CHAINS"] = self.config.mcp_extra_chains
+        if self.config.mcp_bin_path:
+            env_overrides["VERUSIDX_BIN_PATH"] = self.config.mcp_bin_path
+
+        self.mcp_router = MCPRouter(
+            chain=self.config.mcp_chain,
+            enabled=True,
+            read_only=self.config.mcp_read_only,
+            servers=servers,
+            env_overrides=env_overrides if env_overrides else None,
+        )
+
+        statuses = await self.mcp_router.initialize()
+
+        connected = sum(1 for s in statuses.values() if s.connected)
+        total = len(statuses)
+        logger.info("MCP router: %d/%d servers connected", connected, total)
+
+        # Register MCP-exclusive capabilities as agent handlers
+        for cap_name, (server_name, tool_name) in MCP_EXCLUSIVE_TOOLS.items():
+            if server_name in {s.server for s in statuses.values() if s.connected}:
+                self._capability_handlers[cap_name] = self._make_mcp_handler(
+                    server_name, tool_name
+                )
+
+        if connected > 0:
+            logger.info(
+                "MCP-exclusive capabilities registered: %d",
+                sum(
+                    1 for cap in MCP_EXCLUSIVE_TOOLS
+                    if cap in self._capability_handlers
+                ),
+            )
+
+    def _make_mcp_handler(self, server_name: MCPServerName, tool_name: str):
+        """Create a capability handler that delegates to an MCP tool."""
+        async def _handler(**params) -> Dict[str, Any]:
+            result = await self.mcp_router.call_tool(server_name, tool_name, params)
+            if result.success:
+                content = result.content
+                if isinstance(content, dict):
+                    return content
+                return {"result": content, "_routed_via": "mcp"}
+            return {"success": False, "error": result.error, "_routed_via": "mcp"}
+        return _handler
 
     # ------------------------------------------------------------------
     # Internal: capability dispatch

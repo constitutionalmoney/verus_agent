@@ -710,6 +710,17 @@ class VerusConfig:
     marketplace_enabled: bool = False
     ip_protection_enabled: bool = False
 
+    # MCP (Model Context Protocol) integration
+    mcp_enabled: bool = False       # Enable MCP server routing
+    mcp_read_only: bool = False     # Set VERUSIDX_READ_ONLY=true on MCP servers
+    mcp_chain: str = ""             # Chain name for MCP tools (e.g. "VRSC", "vrsctest")
+    mcp_servers: Optional[str] = None  # Comma-separated server list (default: all 7)
+    mcp_audit_dir: Optional[str] = None  # Custom audit log directory
+    mcp_spending_limits_path: Optional[str] = None  # Custom spending-limits.json path
+    mcp_data_dir: Optional[str] = None  # Custom chain data directory for discovery
+    mcp_extra_chains: Optional[str] = None  # Remote daemons (name:host:port:user:pass, ...)
+    mcp_bin_path: Optional[str] = None  # Directory containing verusd binary
+
     # Extra CLI flags
     cli_extra_flags: Dict[str, str] = field(default_factory=dict)
 
@@ -740,6 +751,25 @@ class VerusConfig:
         self.ip_protection_enabled = os.getenv(
             "VERUS_IP_PROTECTION_ENABLED", ""
         ).lower() in ("true", "1", "yes")
+
+        # MCP env overrides
+        self.mcp_enabled = os.getenv(
+            "VERUS_MCP_ENABLED", str(self.mcp_enabled)
+        ).lower() in ("true", "1", "yes")
+        self.mcp_read_only = os.getenv(
+            "VERUS_MCP_READ_ONLY", str(self.mcp_read_only)
+        ).lower() in ("true", "1", "yes")
+        self.mcp_chain = os.getenv("VERUS_MCP_CHAIN", self.mcp_chain)
+        if not self.mcp_chain:
+            self.mcp_chain = "vrsctest" if self.is_testnet else "VRSC"
+        self.mcp_servers = os.getenv("VERUS_MCP_SERVERS", self.mcp_servers)
+        self.mcp_audit_dir = os.getenv("VERUSIDX_AUDIT_DIR", self.mcp_audit_dir)
+        self.mcp_spending_limits_path = os.getenv(
+            "VERUSIDX_SPENDING_LIMITS_PATH", self.mcp_spending_limits_path
+        )
+        self.mcp_data_dir = os.getenv("VERUSIDX_DATA_DIR", self.mcp_data_dir)
+        self.mcp_extra_chains = os.getenv("VERUSIDX_EXTRA_CHAINS", self.mcp_extra_chains)
+        self.mcp_bin_path = os.getenv("VERUSIDX_BIN_PATH", self.mcp_bin_path)
 
         net = os.getenv("VERUS_NETWORK", "").lower()
         if net in ("mainnet", "testnet"):
