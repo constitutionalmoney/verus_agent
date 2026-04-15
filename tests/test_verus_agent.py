@@ -332,6 +332,32 @@ class TestVerusDeFiManager:
         opp = await defi.detect_arbitrage("VRSC", "BTC", "Floralis", "Pure", 1.0)
         assert opp is None  # No profit
 
+    @pytest.mark.asyncio
+    async def test_launch_currency_broadcast_pipeline(self, defi, mock_cli):
+        """definecurrency returns hex → signrawtransaction → sendrawtransaction."""
+        mock_cli.definecurrency = AsyncMock(return_value={"hex": "0100deadbeef"})
+        mock_cli.call = AsyncMock(side_effect=[
+            make_cli_result("signrawtransaction", {"hex": "0100deadbeefsigned", "complete": True}),
+            make_cli_result("sendrawtransaction", "final_txid_999"),
+        ])
+
+        result = await defi.launch_currency({"name": "TestToken", "options": 32})
+        assert result.success
+        assert result.txid == "final_txid_999"
+        # Verify sign+send were called
+        assert mock_cli.call.call_count == 2
+        calls = [c.args[0] for c in mock_cli.call.call_args_list]
+        assert calls == ["signrawtransaction", "sendrawtransaction"]
+
+    @pytest.mark.asyncio
+    async def test_launch_currency_skips_broadcast_when_txid_present(self, defi, mock_cli):
+        """If definecurrency already returns a txid, skip sign+send."""
+        mock_cli.definecurrency = AsyncMock(return_value={"txid": "already_broadcast"})
+
+        result = await defi.launch_currency({"name": "TestToken", "options": 32})
+        assert result.success
+        assert result.txid == "already_broadcast"
+
 
 # ---------------------------------------------------------------------------
 # Login tests

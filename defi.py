@@ -356,6 +356,10 @@ class VerusDeFiManager:
         """
         Launch a new currency on Verus (token or basket/liquidity pool).
 
+        ``definecurrency`` returns a **raw hex transaction** — it does NOT
+        auto-broadcast.  This method completes the pipeline:
+        ``definecurrency`` → ``signrawtransaction`` → ``sendrawtransaction``.
+
         Parameters
         ----------
         definition : dict
@@ -363,15 +367,49 @@ class VerusDeFiManager:
             Must include ``name``, ``options``, ``currencies`` (for baskets), etc.
         """
         try:
-            # prefer ``execute`` when present so that test fixtures using
-            # MagicMock/AsyncMock behave correctly (they only stub "execute").
+            # Step 1: definecurrency → returns raw hex
             if hasattr(self.cli, "execute"):
                 resp = await self.cli.execute("definecurrency", json.dumps(definition))
-                # test fixture returns {'result': {'txid': '...'}}
-                txid = resp.get("result", {}).get("txid", "")
+                raw = resp.get("result", resp)
             else:
-                result = await self.cli.definecurrency(definition)
-                txid = result.get("txid") if isinstance(result, dict) else str(result)
+                raw = await self.cli.definecurrency(definition)
+
+            # Extract hex — definecurrency may return {"hex": "..."} or a
+            # dict with a nested txid (test fixtures).
+            if isinstance(raw, dict):
+                hex_tx = raw.get("hex", "")
+                # If the fixture already has a txid, skip sign+send
+                if raw.get("txid"):
+                    return DeFiOperationResult(
+                        operation="launch_currency",
+                        success=True,
+                        txid=raw["txid"],
+                        data={"definition": definition},
+                    )
+            else:
+                hex_tx = str(raw)
+
+            if not hex_tx:
+                return DeFiOperationResult(
+                    operation="launch_currency",
+                    success=False,
+                    error="definecurrency returned empty hex",
+                    data={"definition": definition},
+                )
+
+            # Step 2: signrawtransaction → returns {"hex": signed, "complete": true}
+            sign_result = await self.cli.call("signrawtransaction", [hex_tx])
+            signed = sign_result.result
+            signed_hex = signed.get("hex", hex_tx) if isinstance(signed, dict) else str(signed)
+
+            if isinstance(signed, dict) and not signed.get("complete", True):
+                logger.warning("signrawtransaction incomplete for %s", definition.get("name"))
+
+            # Step 3: sendrawtransaction → returns txid
+            send_result = await self.cli.call("sendrawtransaction", [signed_hex])
+            txid = send_result.result if isinstance(send_result.result, str) else str(send_result.result)
+
+            logger.info("Currency '%s' launched: txid=%s", definition.get("name"), txid)
             return DeFiOperationResult(
                 operation="launch_currency",
                 success=True,

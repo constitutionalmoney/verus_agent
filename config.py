@@ -280,6 +280,23 @@ AGENT_CAPABILITIES = [
     "verus.mobile.payment_uri",
     "verus.mobile.login_consent",
     "verus.mobile.purchase_link",
+    # Phase 5: VDXF Data Pipeline (signdata, decryptdata, verifysignature)
+    "verus.data.sign",
+    "verus.data.verify",
+    "verus.data.decrypt",
+    "verus.data.getvdxfid",
+    "verus.data.list_received",
+    "verus.data.export_viewingkey",
+    "verus.data.import_viewingkey",
+    # Phase 5: Provenance & NFT workflows (Bitcoin Kali pattern)
+    "verus.provenance.create_nft",
+    "verus.provenance.store_descriptors",
+    "verus.provenance.sign_mmr",
+    "verus.provenance.deliver_encrypted",
+    "verus.provenance.verify",
+    "verus.provenance.list_offer",
+    # Phase 5: VDXF Object Builder
+    "verus.data.build_vdxf",
 ]
 
 # ---------------------------------------------------------------------------
@@ -374,6 +391,24 @@ VDXF_NAMESPACE = {
     "msg_to": "vrsc::uai.messaging.to",
     "msg_body": "vrsc::uai.messaging.body",
     "msg_timestamp": "vrsc::uai.messaging.timestamp",
+    # --- Data Pipeline VDXF keys (from MCP tool-specs & Bitcoin Kali) ---
+    "datadescriptor_type": "i4GC1YGEVD21afWudGoFJVdnfjJ5XWnCQv",  # vrsc::data.type.object.datadescriptor
+    "crosschain_dataref": "iP3euVSzNcXUrLNHnQnR9G6q8jeYuGSxgw",   # crosschaindataref inside descriptors
+    "signaturedata_type": "i7PcVF9wwPtQ6p6jDtCVpohX65pTZuP2ah",   # vrsc::data.signaturedata
+    "mmrdescriptor_type": "i9dVDb4LgfMYrZD1JBNP2uaso4bNAkT4Jr",   # vrsc::data.mmrdescriptor
+    # --- Provenance / NFT VDXF keys (Bitcoin Kali pattern) ---
+    # Use getvdxfid at runtime to resolve custom namespace URIs to i-addresses.
+    # These are template key suffixes under a series VDXF key (e.g. series1.*):
+    "provenance_name": "vrsc::uai.provenance.name",
+    "provenance_description": "vrsc::uai.provenance.description",
+    "provenance_attributes": "vrsc::uai.provenance.attributes",
+    "provenance_image_ref": "vrsc::uai.provenance.imageref",
+    "provenance_image_hash": "vrsc::uai.provenance.imagehash",
+    "provenance_signature": "vrsc::uai.provenance.signature",
+    "provenance_mmrroot": "vrsc::uai.provenance.mmrroot",
+    "provenance_mmrdescriptor": "vrsc::uai.provenance.mmrdescriptor",
+    "provenance_rights": "vrsc::uai.provenance.rights",
+    "provenance_delivery": "vrsc::uai.provenance.delivery",
     # --- System VDXF keys (from VDXF Data Pipeline Wiki) ---
     "vdxf_type_string": "vrsc::data.type.string",               # iK7a5JNJnbeuYWVHCDRpJosj3irGJ5Qa8c
     "vdxf_type_datadescriptor": "vrsc::data.type.object.datadescriptor",  # i4GC1YGEVD21afWudGoFJVdnfjJ5XWnCQv

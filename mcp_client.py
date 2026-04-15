@@ -367,6 +367,12 @@ WRITE_CAPABILITIES: set = {
     "verus.storage.store",
     "verus.storage.store_data_wrapper",
     "verus.storage.store_sendcurrency",
+    # Phase 5: Data pipeline write operations
+    "verus.data.import_viewingkey",
+    "verus.provenance.deliver_encrypted",
+    "verus.provenance.list_offer",
+    "verus.provenance.create_nft",
+    "verus.provenance.store_descriptors",
 }
 
 # Capability → (server, tool, is_write)
@@ -403,7 +409,22 @@ CAPABILITY_TO_MCP: Dict[str, Tuple[MCPServerName, str]] = {
     "verus.messaging.receive_decrypt":      (MCPServerName.DATA, "decryptdata"),
     "verus.login.authenticate":             (MCPServerName.DATA, "signdata"),
     "verus.login.validate":                 (MCPServerName.DATA, "verifysignature"),
+    # --- VDXF Data Pipeline (Phase 5) ---
+    "verus.data.sign":                      (MCPServerName.DATA, "signdata"),
+    "verus.data.verify":                    (MCPServerName.DATA, "verifysignature"),
+    "verus.data.decrypt":                   (MCPServerName.DATA, "decryptdata"),
+    "verus.data.getvdxfid":                 (MCPServerName.IDENTITY, "getvdxfid"),
+    "verus.data.list_received":             (MCPServerName.DATA, "z_listreceivedbyaddress"),
+    "verus.data.export_viewingkey":         (MCPServerName.DATA, "z_exportviewingkey"),
+    "verus.data.import_viewingkey":         (MCPServerName.DATA, "z_importviewingkey"),
 
+    # --- Provenance (Phase 5) ---
+    "verus.provenance.create_nft":          (MCPServerName.IDENTITY, "registeridentity"),
+    "verus.provenance.store_descriptors":   (MCPServerName.IDENTITY, "updateidentity"),
+    "verus.provenance.sign_mmr":            (MCPServerName.DATA, "signdata"),
+    "verus.provenance.deliver_encrypted":   (MCPServerName.SEND, "sendcurrency"),
+    "verus.provenance.verify":              (MCPServerName.DATA, "verifysignature"),
+    "verus.provenance.list_offer":          (MCPServerName.MARKETPLACE, "makeoffer"),
     # --- Marketplace ---
     "verus.marketplace.make_offer":         (MCPServerName.MARKETPLACE, "makeoffer"),
     "verus.marketplace.take_offer":         (MCPServerName.MARKETPLACE, "takeoffer"),

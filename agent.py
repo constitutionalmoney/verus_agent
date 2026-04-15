@@ -42,9 +42,11 @@ from verus_agent.mcp_client import (
     WRITE_CAPABILITIES,
 )
 from verus_agent.mobile import VerusMobileHelper
+from verus_agent.provenance import VerusProvenanceManager
 from verus_agent.reputation import VerusReputationSystem
 from verus_agent.storage import VerusStorageManager
 from verus_agent.swarm_security import VerusSwarmSecurity
+from verus_agent.vdxf_builder import ContentMultiMapBuilder, DataDescriptorBuilder
 from verus_agent.verusid import VerusIDManager
 
 logger = logging.getLogger("verus_agent")
@@ -173,6 +175,7 @@ class VerusBlockchainAgent:
         self.marketplace: Optional[VerusAgentMarketplace] = None
         self.ip_protection: Optional[VerusIPProtection] = None
         self.mobile_helper: Optional[VerusMobileHelper] = None
+        self.provenance: Optional[VerusProvenanceManager] = None
 
         # MCP router (initialized in initialize() when enabled)
         self.mcp_router: Optional[MCPRouter] = None
@@ -243,6 +246,11 @@ class VerusBlockchainAgent:
             )
             self.mobile_helper = VerusMobileHelper(
                 agent_identity=self.config.agent_id,
+            )
+
+            # 3b. Provenance module (uses cli + identity + storage)
+            self.provenance = VerusProvenanceManager(
+                self.cli, self.identity_manager, self.storage_manager
             )
 
             # 4. Build capability dispatch table
@@ -599,6 +607,16 @@ class VerusBlockchainAgent:
             "verus.mining.start": self._handle_mining_start,
             "verus.mining.info": self._handle_mining_info,
             "verus.staking.status": self._handle_staking_status,
+            # VDXF Data Pipeline (Phase 5)
+            "verus.data.sign": self._handle_data_sign,
+            "verus.data.verify": self._handle_data_verify,
+            "verus.data.decrypt": self._handle_data_decrypt,
+            "verus.data.getvdxfid": self._handle_data_getvdxfid,
+            "verus.data.list_received": self._handle_data_list_received,
+            "verus.data.export_viewingkey": self._handle_data_export_viewingkey,
+            "verus.data.import_viewingkey": self._handle_data_import_viewingkey,
+            # VDXF Object Builder (Phase 5)
+            "verus.data.build_vdxf": self._handle_data_build_vdxf,
         }
 
         # --- Extension handlers (registered when modules are enabled) ---
@@ -664,6 +682,17 @@ class VerusBlockchainAgent:
                 "verus.mobile.payment_uri": self._handle_mobile_payment_uri,
                 "verus.mobile.login_consent": self._handle_mobile_login_consent,
                 "verus.mobile.purchase_link": self._handle_mobile_purchase_link,
+            })
+
+        # --- Provenance handlers (Phase 5) ---
+        if self.provenance:
+            self._capability_handlers.update({
+                "verus.provenance.create_nft": self._handle_provenance_create_nft,
+                "verus.provenance.store_descriptors": self._handle_provenance_store_descriptors,
+                "verus.provenance.sign_mmr": self._handle_provenance_sign_mmr,
+                "verus.provenance.deliver_encrypted": self._handle_provenance_deliver_encrypted,
+                "verus.provenance.verify": self._handle_provenance_verify,
+                "verus.provenance.list_offer": self._handle_provenance_list_offer,
             })
 
     # --- Identity handlers ---
@@ -1496,6 +1525,159 @@ class VerusBlockchainAgent:
             "data": result.data,
             "error": result.error,
         }
+
+    # ------------------------------------------------------------------
+    # VDXF Data Pipeline handlers (Phase 5)
+    # ------------------------------------------------------------------
+
+    async def _handle_data_sign(self, **params) -> Dict[str, Any]:
+        """Sign data with a VerusID using signdata (supports message, hex,
+        file, vdxfdata, MMR multi-item, and encrypttoaddress)."""
+        sign_args: Dict[str, Any] = {"address": params["address"]}
+        # Accept exactly one data input mode
+        for key in ("message", "filename", "messagehex", "messagebase64",
+                     "datahash", "vdxfdata", "mmrdata"):
+            if key in params:
+                sign_args[key] = params[key]
+        # Optional parameters
+        for key in ("encrypttoaddress", "createmmr", "hashtype",
+                     "mmrhashtype", "mmrsalt", "vdxfkeys", "vdxfkeynames",
+                     "boundhashes", "prefixstring", "signature"):
+            if key in params:
+                sign_args[key] = params[key]
+        result = await self.cli.call("signdata", [sign_args])
+        return result.result if hasattr(result, "result") else result
+
+    async def _handle_data_verify(self, **params) -> Dict[str, Any]:
+        """Verify a signature with verifysignature."""
+        verify_args: Dict[str, Any] = {
+            "address": params["address"],
+            "signature": params["signature"],
+        }
+        for key in ("message", "filename", "messagehex", "messagebase64",
+                     "datahash", "prefixstring", "vdxfkeys", "vdxfkeynames",
+                     "boundhashes", "hashtype", "checklatest"):
+            if key in params:
+                verify_args[key] = params[key]
+        result = await self.cli.call("verifysignature", [verify_args])
+        return result.result if hasattr(result, "result") else result
+
+    async def _handle_data_decrypt(self, **params) -> Dict[str, Any]:
+        """Decrypt on-chain data using decryptdata."""
+        decrypt_args: Dict[str, Any] = {}
+        for key in ("datadescriptor", "iddata", "evk", "ivk", "txid", "retrieve"):
+            if key in params:
+                decrypt_args[key] = params[key]
+        result = await self.cli.call("decryptdata", [decrypt_args])
+        return result.result if hasattr(result, "result") else result
+
+    async def _handle_data_getvdxfid(self, **params) -> Dict[str, Any]:
+        """Resolve a human-readable VDXF URI to its on-chain i-address."""
+        args = [params["vdxfuri"]]
+        if "bounddata" in params:
+            args.append(params["bounddata"])
+        result = await self.cli.call("getvdxfid", args)
+        return result.result if hasattr(result, "result") else result
+
+    async def _handle_data_list_received(self, **params) -> Dict[str, Any]:
+        """List data/transactions received at a shielded z-address."""
+        args = [params["address"]]
+        if "minconf" in params:
+            args.append(params["minconf"])
+        result = await self.cli.call("z_listreceivedbyaddress", args)
+        return result.result if hasattr(result, "result") else result
+
+    async def _handle_data_export_viewingkey(self, **params) -> Dict[str, Any]:
+        """Export the extended viewing key for a z-address."""
+        result = await self.cli.call("z_exportviewingkey", [params["address"]])
+        r = result.result if hasattr(result, "result") else result
+        return {"evk": r} if isinstance(r, str) else r
+
+    async def _handle_data_import_viewingkey(self, **params) -> Dict[str, Any]:
+        """Import a viewing key to enable decryption of data at a z-address."""
+        args = [params["vkey"]]
+        if "rescan" in params:
+            args.append(params["rescan"])
+        if "startHeight" in params:
+            args.append(params["startHeight"])
+        result = await self.cli.call("z_importviewingkey", args)
+        return result.result if hasattr(result, "result") else result
+
+    async def _handle_data_build_vdxf(self, **params) -> Dict[str, Any]:
+        """Build a structured contentmultimap payload using the VDXF builder."""
+        builder = ContentMultiMapBuilder()
+        for entry in params.get("entries", []):
+            vdxf_key = entry["vdxf_key"]
+            desc = DataDescriptorBuilder()
+            if "label" in entry:
+                desc.set_label(entry["label"])
+            if "mimetype" in entry:
+                desc.set_mimetype(entry["mimetype"])
+            if "message" in entry:
+                desc.set_message(entry["message"])
+            elif "objectdata" in entry:
+                desc.set_objectdata_hex(entry["objectdata"])
+            builder.add_descriptor(vdxf_key, desc.build())
+        return {"contentmultimap": builder.build()}
+
+    # ------------------------------------------------------------------
+    # Provenance & NFT handlers (Phase 5 — Bitcoin Kali pattern)
+    # ------------------------------------------------------------------
+
+    async def _handle_provenance_create_nft(self, **params) -> Dict[str, Any]:
+        """Create a VerusID to hold NFT data with optional initial descriptors."""
+        return await self.provenance.create_nft_identity(
+            name=params["name"],
+            primary_addresses=params["primary_addresses"],
+            recovery_authority=params.get("recovery_authority"),
+            revocation_authority=params.get("revocation_authority"),
+            content_multimap=params.get("content_multimap"),
+        )
+
+    async def _handle_provenance_store_descriptors(self, **params) -> Dict[str, Any]:
+        """Store an array of typed DataDescriptors in a contentmultimap."""
+        return await self.provenance.store_typed_descriptors(
+            identity_name=params["identity_name"],
+            series_key=params["series_key"],
+            descriptors=params["descriptors"],
+        )
+
+    async def _handle_provenance_sign_mmr(self, **params) -> Dict[str, Any]:
+        """Build MMR over data leaves and sign the root with a curator identity."""
+        return await self.provenance.sign_provenance_mmr(
+            signing_identity=params["signing_identity"],
+            data_leaves=params["data_leaves"],
+            mmrhashtype=params.get("mmrhashtype", "blake2b"),
+            encrypttoaddress=params.get("encrypttoaddress"),
+        )
+
+    async def _handle_provenance_deliver_encrypted(self, **params) -> Dict[str, Any]:
+        """Encrypt file and deliver via sendcurrency to a z-address."""
+        return await self.provenance.encrypted_file_delivery(
+            from_address=params["from_address"],
+            z_address=params["z_address"],
+            file_path=params.get("file_path"),
+            data=params.get("data"),
+        )
+
+    async def _handle_provenance_verify(self, **params) -> Dict[str, Any]:
+        """Full verification: get content → decrypt → hash compare → verify signature."""
+        return await self.provenance.verify_provenance(
+            identity_name=params["identity_name"],
+            curator_identity=params["curator_identity"],
+            series_key=params.get("series_key"),
+            evk=params.get("evk"),
+        )
+
+    async def _handle_provenance_list_offer(self, **params) -> Dict[str, Any]:
+        """Create an atomic swap marketplace offer for a provenance NFT."""
+        return await self.provenance.list_for_marketplace(
+            identity_name=params["identity_name"],
+            price=params["price"],
+            currency=params.get("currency", "VRSC"),
+            for_address=params.get("for_address"),
+            expiry_height=params.get("expiry_height"),
+        )
 
     # ------------------------------------------------------------------
     # Internal: swarm registration

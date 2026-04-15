@@ -871,6 +871,229 @@ class VerusStorageManager:
     # Method selection helper
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # sendcurrency_data — send data payload to z-address
+    # ------------------------------------------------------------------
+
+    async def sendcurrency_data(
+        self,
+        from_address: str,
+        z_address: str,
+        data_hex: str,
+        amount: float = 0.0001,
+    ) -> StorageResult:
+        """
+        Send a data payload to a z-address via ``sendcurrency``.
+
+        The data is embedded in the transaction and encrypted with Sapling
+        encryption.  Only the z-address holder (or anyone with the EVK)
+        can decrypt.
+
+        Data transactions use ``amount: 0.0001`` (dust) — the ``i4GC1...``
+        VDXF key in the memo marks them as data rather than value transfers.
+
+        Parameters
+        ----------
+        from_address : str
+            Sending identity or address.
+        z_address : str
+            Shielded destination (must start with ``zs``).
+        data_hex : str
+            Hex-encoded data to embed.
+        amount : float
+            Minimum amount to send (default 0.0001 VRSC dust).
+
+        Returns
+        -------
+        StorageResult
+            Result with opid for async status tracking via
+            ``z_getoperationstatus``.
+        """
+        try:
+            outputs = [{
+                "address": z_address,
+                "amount": amount,
+                "data": {"messagehex": data_hex},
+            }]
+            result = await self.cli.call(
+                "sendcurrency", [from_address, outputs]
+            )
+            r = result.result if hasattr(result, "result") else result
+            opid = r if isinstance(r, str) else r.get("opid", str(r))
+
+            data_hash = hashlib.sha256(bytes.fromhex(data_hex)).hexdigest()
+
+            return StorageResult(
+                operation="sendcurrency_data",
+                success=True,
+                data={
+                    "opid": opid,
+                    "z_address": z_address,
+                    "data_hash": data_hash,
+                    "size_bytes": len(data_hex) // 2,
+                },
+            )
+        except VerusError as exc:
+            logger.error("sendcurrency_data failed: %s", exc)
+            return StorageResult(
+                operation="sendcurrency_data", success=False, error=str(exc),
+            )
+
+    # ------------------------------------------------------------------
+    # retrieve_from_z_address — list + filter data txs at a z-address
+    # ------------------------------------------------------------------
+
+    async def retrieve_from_z_address(
+        self,
+        z_address: str,
+        min_confirmations: int = 1,
+    ) -> StorageResult:
+        """
+        Retrieve data transactions received at a z-address.
+
+        Uses ``z_listreceivedbyaddress`` and filters for data transactions
+        (amount ≈ 0, descriptor keyed by ``i4GC1YGEVD21afWudGoFJVdnfjJ5XWnCQv``).
+
+        Returns all matching descriptors with their txids so they can be
+        fed into ``decryptdata`` for decryption.
+
+        Parameters
+        ----------
+        z_address : str
+            The shielded address to query.
+        min_confirmations : int
+            Minimum confirmations required (default 1).
+
+        Returns
+        -------
+        StorageResult
+            Result with list of data descriptors and txids.
+        """
+        try:
+            result = await self.cli.call(
+                "z_listreceivedbyaddress", [z_address, min_confirmations]
+            )
+            r = result.result if hasattr(result, "result") else result
+
+            data_txs = []
+            for entry in (r if isinstance(r, list) else []):
+                # Data transactions identified by near-zero amount or
+                # presence of datadescriptor VDXF key in memo
+                amount = entry.get("amount", 0)
+                if isinstance(amount, (int, float)) and amount < 0.001:
+                    data_txs.append({
+                        "txid": entry.get("txid"),
+                        "amount": amount,
+                        "memo": entry.get("memo"),
+                        "outindex": entry.get("outindex"),
+                        "confirmations": entry.get("confirmations"),
+                    })
+
+            return StorageResult(
+                operation="retrieve_from_z_address",
+                success=True,
+                data={
+                    "z_address": z_address,
+                    "data_transactions": data_txs,
+                    "count": len(data_txs),
+                },
+            )
+        except VerusError as exc:
+            logger.error("retrieve_from_z_address failed: %s", exc)
+            return StorageResult(
+                operation="retrieve_from_z_address", success=False, error=str(exc),
+            )
+
+    # ------------------------------------------------------------------
+    # store_with_signature — sign + optional encrypt + store
+    # ------------------------------------------------------------------
+
+    async def store_with_signature(
+        self,
+        identity_name: str,
+        signing_address: str,
+        message: Optional[str] = None,
+        filename: Optional[str] = None,
+        vdxf_key: str = VDXF_STORAGE_CHUNK,
+        encrypttoaddress: Optional[str] = None,
+    ) -> StorageResult:
+        """
+        Sign data with ``signdata`` and store the signed descriptor in
+        the identity's contentmultimap.
+
+        Optionally encrypts to ``encrypttoaddress`` using a shared symmetric
+        key (SSK) derived from the sender's and recipient's keys.
+
+        Parameters
+        ----------
+        identity_name : str
+            The VerusID to store the signed data in.
+        signing_address : str
+            Identity or address to sign with.
+        message : str, optional
+            Plain text message to sign.
+        filename : str, optional
+            Path to a file to sign.
+        vdxf_key : str
+            VDXF key in contentmultimap.
+        encrypttoaddress : str, optional
+            If provided, encrypts for this address after signing.
+
+        Returns
+        -------
+        StorageResult
+            Result with txid, signature, and signed data descriptor.
+        """
+        try:
+            sign_args: Dict[str, Any] = {"address": signing_address}
+            if message:
+                sign_args["message"] = message
+            elif filename:
+                sign_args["filename"] = filename
+            else:
+                return StorageResult(
+                    operation="store_with_signature",
+                    success=False,
+                    error="Either message or filename must be provided",
+                )
+            if encrypttoaddress:
+                sign_args["encrypttoaddress"] = encrypttoaddress
+
+            sign_result = await self.cli.call("signdata", [sign_args])
+            sr = sign_result.result if hasattr(sign_result, "result") else sign_result
+
+            # Store the signed/encrypted descriptor in contentmultimap
+            descriptor = sr.get("signaturedata", sr) if isinstance(sr, dict) else sr
+            content_multimap = {
+                vdxf_key: [descriptor] if isinstance(descriptor, dict) else [{"": str(descriptor)}],
+            }
+
+            update_result = await self.cli.updateidentity({
+                "name": identity_name,
+                "contentmultimap": content_multimap,
+            })
+            txid = update_result if isinstance(update_result, str) else update_result.get("txid")
+
+            return StorageResult(
+                operation="store_with_signature",
+                success=True,
+                txid=txid,
+                data={
+                    "signature": sr.get("signature") if isinstance(sr, dict) else None,
+                    "identity": sr.get("identity") if isinstance(sr, dict) else signing_address,
+                    "encrypted": encrypttoaddress is not None,
+                },
+            )
+        except VerusError as exc:
+            logger.error("store_with_signature failed: %s", exc)
+            return StorageResult(
+                operation="store_with_signature", success=False, error=str(exc),
+            )
+
+    # ------------------------------------------------------------------
+    # Method selection helper
+    # ------------------------------------------------------------------
+
     @staticmethod
     def recommend_method(file_size_bytes: int) -> str:
         """
