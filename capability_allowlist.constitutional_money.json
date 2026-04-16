@@ -12,6 +12,7 @@
     "verus.identity.vault",
     "verus.currency.send",
     "verus.currency.estimate",
+    "verus.mobile.payment_uri",
     "verus.storage.store",
     "verus.storage.retrieve",
     "verus.storage.store_data_wrapper",
@@ -60,7 +61,8 @@
       "examples_not_allowed": [
         "verus.marketplace.*",
         "verus.ip.*",
-        "verus.mobile.*",
+        "verus.mobile.login_consent",
+        "verus.mobile.purchase_link",
         "verus.defi.*",
         "verus.market.monitor",
         "verus.bridge.cross"

@@ -13,6 +13,7 @@
     "verus.storage.retrieve",
     "verus.storage.store_data_wrapper",
     "verus.storage.retrieve_data_wrapper",
+    "verus.mobile.payment_uri",
     "verus.login.authenticate",
     "verus.login.validate",
     "verus.market.monitor"
