@@ -14,6 +14,12 @@
     "verus.storage.store_data_wrapper",
     "verus.storage.retrieve_data_wrapper",
     "verus.mobile.payment_uri",
+    "verus.mobile.login_consent",
+    "verus.mobile.purchase_link",
+    "verus.mobile.generic_request_link",
+    "verus.mobile.identity_update_request_link",
+    "verus.mobile.app_encryption_request_link",
+    "verus.mobile.capabilities",
     "verus.login.authenticate",
     "verus.login.validate",
     "verus.market.monitor"

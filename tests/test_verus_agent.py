@@ -83,6 +83,15 @@ class TestVerusConfig:
         cfg = VerusConfig()
         assert cfg.agent_id == AGENT_ID
 
+    def test_uai_integration_default_enabled(self):
+        cfg = VerusConfig()
+        assert cfg.uai_integration_enabled is True
+
+    def test_uai_integration_env_override(self, monkeypatch):
+        monkeypatch.setenv("VERUS_UAI_INTEGRATION_ENABLED", "false")
+        cfg = VerusConfig()
+        assert cfg.uai_integration_enabled is False
+
     def test_capabilities_count(self):
         # there used to be exactly 14 core capabilities; allow new ones to
         # accumulate without breaking the test (only a lower bound is

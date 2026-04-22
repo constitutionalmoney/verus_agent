@@ -294,8 +294,11 @@ class VerusBlockchainAgent:
 
         self._running = True
 
-        # Register with UAI swarm
-        await self._register_with_swarm()
+        # Register with UAI swarm unless explicitly disabled.
+        if self.config.uai_integration_enabled:
+            await self._register_with_swarm()
+        else:
+            logger.info("UAI integration disabled; skipping swarm registration.")
 
         # Start background loops
         asyncio.create_task(self._task_processing_loop())
@@ -682,6 +685,10 @@ class VerusBlockchainAgent:
                 "verus.mobile.payment_uri": self._handle_mobile_payment_uri,
                 "verus.mobile.login_consent": self._handle_mobile_login_consent,
                 "verus.mobile.purchase_link": self._handle_mobile_purchase_link,
+                "verus.mobile.generic_request_link": self._handle_mobile_generic_request_link,
+                "verus.mobile.identity_update_request_link": self._handle_mobile_identity_update_request_link,
+                "verus.mobile.app_encryption_request_link": self._handle_mobile_app_encryption_request_link,
+                "verus.mobile.capabilities": self._handle_mobile_capabilities,
             })
 
         # --- Provenance handlers (Phase 5) ---
@@ -1525,6 +1532,55 @@ class VerusBlockchainAgent:
             "data": result.data,
             "error": result.error,
         }
+
+    async def _handle_mobile_generic_request_link(self, **params) -> Dict[str, Any]:
+        """Generate a compact GenericRequest deeplink (verus://1/<payload>)."""
+        result = self.mobile_helper.generate_generic_request_link(
+            compact_payload=params["compact_payload"],
+            detail_types=params.get("detail_types"),
+            requires_experimental=params.get("requires_experimental", False),
+            legacy_fallback_uri=params.get("legacy_fallback_uri", ""),
+        )
+        return {
+            "success": result.success,
+            "uri": result.uri,
+            "qr_data": result.qr_data,
+            "data": result.data,
+            "error": result.error,
+        }
+
+    async def _handle_mobile_identity_update_request_link(self, **params) -> Dict[str, Any]:
+        """Generate a GenericRequest deeplink for IdentityUpdateRequest flows."""
+        result = self.mobile_helper.generate_identity_update_request_link(
+            compact_payload=params["compact_payload"],
+            legacy_fallback_uri=params.get("legacy_fallback_uri", ""),
+        )
+        return {
+            "success": result.success,
+            "uri": result.uri,
+            "qr_data": result.qr_data,
+            "data": result.data,
+            "error": result.error,
+        }
+
+    async def _handle_mobile_app_encryption_request_link(self, **params) -> Dict[str, Any]:
+        """Generate a GenericRequest deeplink for AppEncryptionRequest flows."""
+        result = self.mobile_helper.generate_app_encryption_request_link(
+            compact_payload=params["compact_payload"],
+            requests_secret_key_material=params.get("requests_secret_key_material", False),
+            legacy_fallback_uri=params.get("legacy_fallback_uri", ""),
+        )
+        return {
+            "success": result.success,
+            "uri": result.uri,
+            "qr_data": result.qr_data,
+            "data": result.data,
+            "error": result.error,
+        }
+
+    async def _handle_mobile_capabilities(self, **_params) -> Dict[str, Any]:
+        """Return the mobile capability snapshot used for developer guidance."""
+        return self.mobile_helper.get_mobile_capabilities()
 
     # ------------------------------------------------------------------
     # VDXF Data Pipeline handlers (Phase 5)

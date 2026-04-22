@@ -50,3 +50,21 @@ async def test_initialize_registers_extension_capabilities_from_env(monkeypatch)
         assert "verus.ip.verify_integrity" in agent._capability_handlers
     finally:
         await agent.shutdown()
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_start_skips_swarm_registration_when_uai_disabled(monkeypatch):
+    """When UAI is disabled, startup should not attempt swarm registration."""
+    monkeypatch.setenv("VERUS_UAI_INTEGRATION_ENABLED", "false")
+    monkeypatch.setattr(VerusCLI, "initialize", AsyncMock(return_value=None))
+
+    agent = VerusBlockchainAgent(VerusConfig())
+    await agent.initialize()
+    agent._register_with_swarm = AsyncMock(return_value=None)  # type: ignore[method-assign]
+
+    try:
+        await agent.start()
+        agent._register_with_swarm.assert_not_called()  # type: ignore[attr-defined]
+    finally:
+        await agent.shutdown()

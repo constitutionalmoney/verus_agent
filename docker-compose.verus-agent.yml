@@ -1,0 +1,25 @@
+services:
+  verus-agent:
+    image: python:3.11-slim
+    container_name: verus_agent_standalone
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace/verus_agent
+    ports:
+      - "${VERUS_AGENT_HEALTH_PORT:-9124}:9124"
+    environment:
+      VERUS_NETWORK: ${VERUS_NETWORK:-testnet}
+      VERUS_API_URL: ${VERUS_API_URL:-https://api.verustest.net}
+      VERUS_UAI_INTEGRATION_ENABLED: ${VERUS_UAI_INTEGRATION_ENABLED:-false}
+      VERUS_SECURITY_LEVEL: ${VERUS_SECURITY_LEVEL:-verify_only}
+      VERUS_MARKETPLACE_ENABLED: ${VERUS_MARKETPLACE_ENABLED:-false}
+      VERUS_IP_PROTECTION_ENABLED: ${VERUS_IP_PROTECTION_ENABLED:-false}
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    command:
+      - sh
+      - -lc
+      - >
+          pip install --no-cache-dir "numpy==2.4.3" "aiohttp==3.11.18" "pytest==8.3.5" "pytest-timeout==2.3.1" &&
+          python verus_agent/run_verus_agent_task.py --network ${VERUS_NETWORK:-testnet} smoke &&
+          python -m verus_agent.agent

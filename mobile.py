@@ -82,6 +82,8 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote, urlencode
 
+from verus_agent.config import VERUS_MOBILE_WALLET_CAPABILITIES
+
 logger = logging.getLogger(__name__)
 
 
@@ -93,6 +95,7 @@ VDXF_AGENT_PRODUCT = "vrsc::uai.product.name"
 
 # Verus Mobile deep-link scheme
 VRSC_URI_SCHEME = "vrsc"
+GENERIC_REQUEST_URI_PREFIX = "verus://1/"
 
 
 # ---------------------------------------------------------------------------
@@ -500,6 +503,99 @@ class VerusMobileHelper:
     # ------------------------------------------------------------------
     # Utility — Batch QR Payload
     # ------------------------------------------------------------------
+
+    def generate_generic_request_link(
+        self,
+        compact_payload: str,
+        detail_types: Optional[List[str]] = None,
+        requires_experimental: bool = False,
+        legacy_fallback_uri: str = "",
+    ) -> MobileLinkResult:
+        """
+        Generate a compact GenericRequest deeplink.
+
+        Format:
+            verus://1/<compact payload>
+        """
+        payload = (compact_payload or "").strip()
+        if not payload:
+            return MobileLinkResult(
+                operation="generic_request_link",
+                success=False,
+                error="compact_payload is required",
+            )
+
+        uri = f"{GENERIC_REQUEST_URI_PREFIX}{payload}"
+        data = {
+            "format": "GenericRequest",
+            "uri_prefix": GENERIC_REQUEST_URI_PREFIX,
+            "detail_types": detail_types or [],
+            "requires_experimental_deeplinks": bool(requires_experimental),
+            "legacy_formats_still_supported": True,
+        }
+        if legacy_fallback_uri:
+            data["legacy_fallback_uri"] = legacy_fallback_uri
+
+        return MobileLinkResult(
+            operation="generic_request_link",
+            success=True,
+            uri=uri,
+            qr_data=uri,
+            data=data,
+        )
+
+    def generate_identity_update_request_link(
+        self,
+        compact_payload: str,
+        legacy_fallback_uri: str = "",
+    ) -> MobileLinkResult:
+        """Generate a GenericRequest deeplink for IdentityUpdateRequest."""
+        result = self.generate_generic_request_link(
+            compact_payload=compact_payload,
+            detail_types=["IdentityUpdateRequest"],
+            requires_experimental=True,
+            legacy_fallback_uri=legacy_fallback_uri,
+        )
+        if result.success:
+            result.operation = "identity_update_request_link"
+            result.data["requires_z_seed_for_credential_encryption"] = True
+            result.data["credential_key"] = "vrsc::identity.credential"
+        return result
+
+    def generate_app_encryption_request_link(
+        self,
+        compact_payload: str,
+        requests_secret_key_material: bool = False,
+        legacy_fallback_uri: str = "",
+    ) -> MobileLinkResult:
+        """Generate a GenericRequest deeplink for AppEncryptionRequest."""
+        result = self.generate_generic_request_link(
+            compact_payload=compact_payload,
+            detail_types=["AppEncryptionRequest"],
+            requires_experimental=True,
+            legacy_fallback_uri=legacy_fallback_uri,
+        )
+        if result.success:
+            result.operation = "app_encryption_request_link"
+            result.data["requires_z_seed"] = True
+            result.data["requests_secret_key_material"] = bool(requests_secret_key_material)
+            result.data["can_encrypt_response_descriptor"] = True
+        return result
+
+    def get_mobile_capabilities(self) -> Dict[str, Any]:
+        """
+        Return a capability snapshot for Verus Mobile integration guidance.
+
+        This is intended for agent responses when deciding whether mobile can
+        execute a workflow that might otherwise be desktop-only.
+        """
+        snapshot = json.loads(json.dumps(VERUS_MOBILE_WALLET_CAPABILITIES))
+        snapshot["runtime"] = {
+            "network": self.network.value,
+            "helper_enabled": self.enabled,
+            "agent_identity": self.agent_identity,
+        }
+        return snapshot
 
     def encode_qr_base64(self, data: str) -> str:
         """Base64-encode a QR payload (for compact transmission)."""

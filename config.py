@@ -165,6 +165,63 @@ VERUSPAY_DEEP_LINK_SCHEME = "i5jtwbp6zymeay9llnraglgjqgdrffsau4"
 WALLET_ENVIRONMENTS = ["extension", "mobile", "desktop"]
 
 # ---------------------------------------------------------------------------
+# Verus Mobile Wallet Capability Snapshot (1.0.1 TestFlight / v1.1.0-1 APK)
+# ---------------------------------------------------------------------------
+# Used by the agent to guide app developers on when mobile can replace
+# desktop workflows.
+VERUS_MOBILE_WALLET_CAPABILITIES = {
+    "release": {
+        "ios_testflight": "1.0.1-1",
+        "android_apk": "v1.1.0-1",
+    },
+    "shielded_support": {
+        "android_private_transactions": True,
+        "ios_private_transactions": True,
+        "feature_parity_ios_android": True,
+        "requirements": [
+            "Configured Z seed (24-word mnemonic or Sapling spending key)",
+            "Shielded sync complete before spending",
+            "Spendable balance requires confirmations",
+        ],
+        "notes": [
+            "Z memos are supported for private recipients",
+            "Sending is blocked while shielded sync is in progress",
+        ],
+    },
+    "deeplinks": {
+        "preferred_format": "verus://1/<compact_payload>",
+        "legacy_supported": [
+            "x-callback-url VerusPay",
+            "legacy login/auth deeplinks",
+        ],
+        "experimental_setting_required_for": [
+            "IdentityUpdateRequest",
+            "AppEncryptionRequest",
+        ],
+    },
+    "generic_request_details": {
+        "veruspay_v4_invoice": "supported",
+        "authentication_request": "supported",
+        "identity_update_request": "supported_experimental",
+        "app_encryption_request": "supported_experimental",
+        "data_packet_request": "library_ready_ui_pending",
+        "user_data_request": "library_ready_ui_pending",
+    },
+    "identity_update_flow": [
+        "requester and target identity review",
+        "change summary with high-risk highlight",
+        "content and authority/recovery/revocation review steps",
+        "payment confirmation and submit",
+        "transaction id confirmation output",
+    ],
+    "security_notes": [
+        "Identity credential plaintext is encrypted locally before tx creation",
+        "AppEncryptionRequest derivation depends on user Z seed",
+        "Responses can be encrypted when a response encryption address is supplied",
+    ],
+}
+
+# ---------------------------------------------------------------------------
 # verus-connect Library Reference
 # ---------------------------------------------------------------------------
 # Drop-in VerusID login for websites.  Server middleware + frontend SDK.
@@ -280,6 +337,10 @@ AGENT_CAPABILITIES = [
     "verus.mobile.payment_uri",
     "verus.mobile.login_consent",
     "verus.mobile.purchase_link",
+    "verus.mobile.generic_request_link",
+    "verus.mobile.identity_update_request_link",
+    "verus.mobile.app_encryption_request_link",
+    "verus.mobile.capabilities",
     # Phase 5: VDXF Data Pipeline (signdata, decryptdata, verifysignature)
     "verus.data.sign",
     "verus.data.verify",
@@ -477,6 +538,7 @@ VDXF_NAMESPACE = {
     #   USER_DATA           → user data page (status: not fully known)
     "AUTHENTICATION_REQUEST":       "AUTHENTICATION_REQUEST_VDXF_KEY",
     "VERUSPAY_INVOICE_DETAILS":     "VERUSPAY_INVOICE_DETAILS_VDXF_KEY",
+    "IDENTITY_UPDATE_REQUEST_DETAIL": "IDENTITY_UPDATE_REQUEST_VDXF_KEY",
     "APP_ENCRYPTION_REQUEST":       "APP_ENCRYPTION_REQUEST_VDXF_KEY",
     "DATA_PACKET_REQUEST":          "DATA_PACKET_REQUEST_VDXF_KEY",
     "USER_DATA_REQUEST":            "USER_DATA_REQUEST_VDXF_KEY",
@@ -737,6 +799,7 @@ class VerusConfig:
 
     # Swarm coordinator
     swarm_ws_url: str = "ws://uai-core:8001/ws/swarm"
+    uai_integration_enabled: bool = True
 
     # Extension toggles
     security_enabled: bool = False
@@ -771,6 +834,9 @@ class VerusConfig:
         self.destination_address = os.getenv("VERUS_DESTINATION_ADDRESS", self.destination_address)
         self.uai_core_url = os.getenv("UAI_CORE_URL", self.uai_core_url)
         self.swarm_ws_url = os.getenv("UAI_SWARM_WS_URL", self.swarm_ws_url)
+        self.uai_integration_enabled = os.getenv(
+            "VERUS_UAI_INTEGRATION_ENABLED", str(self.uai_integration_enabled)
+        ).lower() in ("true", "1", "yes")
 
         # RPC auth from environment
         self.rpc_user = os.getenv("VERUS_RPC_USER", self.rpc_user)

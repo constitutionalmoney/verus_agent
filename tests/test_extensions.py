@@ -1138,3 +1138,37 @@ class TestMobileWallet:
         encoded = helper.encode_qr_base64(original)
         decoded = helper.decode_qr_base64(encoded)
         assert decoded == original
+
+    def test_generic_request_link(self, helper):
+        result = helper.generate_generic_request_link(
+            compact_payload="abc123payload",
+            detail_types=["AuthenticationRequest"],
+        )
+        assert result.success is True
+        assert result.uri == "verus://1/abc123payload"
+        assert result.data["detail_types"] == ["AuthenticationRequest"]
+
+    def test_identity_update_request_link(self, helper):
+        result = helper.generate_identity_update_request_link(
+            compact_payload="identitypayload",
+        )
+        assert result.success is True
+        assert result.operation == "identity_update_request_link"
+        assert result.data["requires_experimental_deeplinks"] is True
+        assert result.data["credential_key"] == "vrsc::identity.credential"
+
+    def test_app_encryption_request_link(self, helper):
+        result = helper.generate_app_encryption_request_link(
+            compact_payload="encryptpayload",
+            requests_secret_key_material=True,
+        )
+        assert result.success is True
+        assert result.operation == "app_encryption_request_link"
+        assert result.data["requires_z_seed"] is True
+        assert result.data["requests_secret_key_material"] is True
+
+    def test_mobile_capability_snapshot(self, helper):
+        caps = helper.get_mobile_capabilities()
+        assert caps["release"]["ios_testflight"] == "1.0.1-1"
+        assert caps["deeplinks"]["preferred_format"] == "verus://1/<compact_payload>"
+        assert caps["generic_request_details"]["identity_update_request"] == "supported_experimental"
