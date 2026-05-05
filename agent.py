@@ -577,6 +577,7 @@ class VerusBlockchainAgent:
     def _build_capability_handlers(self) -> None:
         """Build the mapping from capability strings to handler methods."""
         self._capability_handlers = {
+            "verus.identity.get": self._handle_identity_get,
             "verus.identity.create": self._handle_identity_create,
             "verus.identity.update": self._handle_identity_update,
             "verus.identity.vault": self._handle_identity_vault,
@@ -703,6 +704,41 @@ class VerusBlockchainAgent:
             })
 
     # --- Identity handlers ---
+
+    async def _handle_identity_get(self, **params) -> Dict[str, Any]:
+        self.state = VerusAgentState.MANAGING_IDENTITY
+        name_or_id = (
+            params.get("name_or_id")
+            or params.get("iaddress")
+            or params.get("identity")
+            or params.get("name")
+        )
+        if not name_or_id:
+            raise ValueError(
+                "verus.identity.get requires one of: name_or_id, iaddress, identity, name"
+            )
+
+        identity = await self.identity_manager.get_identity(
+            name_or_id,
+            use_cache=params.get("use_cache", False),
+        )
+        return {
+            "name": identity.name,
+            "full_name": identity.full_name,
+            "identity_address": identity.identity_address,
+            "i_address": identity.i_address,
+            "parent": identity.parent,
+            "version": identity.version,
+            "flags": identity.flags,
+            "primary_addresses": identity.primary_addresses,
+            "recovery_authority": identity.recovery_authority,
+            "revocation_authority": identity.revocation_authority,
+            "private_address": identity.private_address,
+            "timelock": identity.timelock,
+            "minimumsignatures": identity.minimumsignatures,
+            "content_map": identity.content_map,
+            "content_multimap": identity.content_multimap,
+        }
 
     async def _handle_identity_create(self, **params) -> Dict[str, Any]:
         self.state = VerusAgentState.MANAGING_IDENTITY

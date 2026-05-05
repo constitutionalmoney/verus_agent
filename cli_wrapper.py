@@ -127,8 +127,12 @@ class VerusCLI:
     async def initialize(self) -> None:
         """Open HTTP session (for API backend) and verify daemon version."""
         if self._backend == "api":
+            auth = None
+            if self.config.rpc_user and self.config.rpc_password:
+                auth = aiohttp.BasicAuth(self.config.rpc_user, self.config.rpc_password)
             self._session = aiohttp.ClientSession(
                 timeout=aiohttp.ClientTimeout(total=self.config.api_timeout),
+                auth=auth,
             )
         await self._verify_daemon_version()
 

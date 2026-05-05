@@ -29,7 +29,7 @@ from verus_agent.cli_wrapper import (
     VerusAPIError,
     VerusCLI,
 )
-from verus_agent.verusid import VerusIDManager
+from verus_agent.verusid import VerusIdentity, VerusIDManager
 from verus_agent.defi import VerusDeFiManager, ConversionEstimate
 from verus_agent.login import VerusLoginManager
 from verus_agent.storage import VerusStorageManager
@@ -567,6 +567,47 @@ class TestVerusBlockchainAgent:
         assert result.success
         assert result.result["estimated_output"] == 0.001
         assert agent.tasks_completed == 1
+
+    @pytest.mark.asyncio
+    async def test_process_task_identity_get_with_iaddress(self, agent):
+        with patch.object(VerusCLI, "initialize", new_callable=AsyncMock):
+            await agent.initialize()
+
+        agent.identity_manager.get_identity = AsyncMock(
+            return_value=VerusIdentity(
+                name="CONSTITUTION",
+                identity_address="iMUw5xvWkC7qsCzgxi2um9YRCmugmBhBfm",
+                i_address="iMUw5xvWkC7qsCzgxi2um9YRCmugmBhBfm",
+                parent="",
+                version=1,
+                flags=0,
+                primary_addresses=["RTestAddress123"],
+                recovery_authority="",
+                revocation_authority="",
+                private_address="zsTestPrivateAddress123",
+                timelock=0,
+                minimumsignatures=1,
+                content_map={},
+                content_multimap={},
+            )
+        )
+
+        result = await agent.process_task({
+            "task_id": "t3",
+            "capability": "verus.identity.get",
+            "params": {
+                "iaddress": "iMUw5xvWkC7qsCzgxi2um9YRCmugmBhBfm",
+            },
+        })
+
+        assert result.success
+        assert result.result["identity_address"] == "iMUw5xvWkC7qsCzgxi2um9YRCmugmBhBfm"
+        assert result.result["i_address"] == "iMUw5xvWkC7qsCzgxi2um9YRCmugmBhBfm"
+        assert result.result["full_name"] == "CONSTITUTION"
+        agent.identity_manager.get_identity.assert_awaited_once_with(
+            "iMUw5xvWkC7qsCzgxi2um9YRCmugmBhBfm",
+            use_cache=False,
+        )
 
     def test_adapt_behavior(self, agent):
         # Seed experiences
