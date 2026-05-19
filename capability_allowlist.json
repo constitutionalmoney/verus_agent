@@ -13,6 +13,9 @@
     "verus.storage.retrieve",
     "verus.storage.store_data_wrapper",
     "verus.storage.retrieve_data_wrapper",
+    "verus.provenance.create_nft",
+    "verus.provenance.store_descriptors",
+    "verus.provenance.sign_mmr",
     "verus.mobile.payment_uri",
     "verus.mobile.login_consent",
     "verus.mobile.purchase_link",
@@ -30,6 +33,7 @@
     "getcurrencystate",
     "getidentity",
     "getidentitycontent",
+    "updateidentity",
     "estimateconversion"
   ]
 }
