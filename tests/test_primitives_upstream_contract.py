@@ -14,13 +14,16 @@ If the upstream repository is not present in the workspace, tests are skipped.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PRIMITIVES_ROOT = ROOT / "verus-typescript-primitives"
+PRIMITIVES_ROOT = Path(
+    os.getenv("VERUS_TYPESCRIPT_PRIMITIVES_ROOT", ROOT / "verus-typescript-primitives")
+).resolve()
 
 
 pytestmark = [
@@ -38,9 +41,12 @@ def _read(relpath: str) -> str:
 
 def test_contentmultimap_supports_fqn_and_partial_identity_flow() -> None:
     content = _read("src/pbaas/ContentMultiMap.ts")
+    kv_map = _read("src/utils/KvMap.ts")
 
     assert "export class KvContent" in content
-    assert "KvContent key collision" in content
+    assert "export class KvContent extends KvMap" in content
+    assert "KvMap key collision" in kv_map
+    assert "existing.toIAddress() === newIAddr" in kv_map
     assert "export class FqnContentMultiMap extends ContentMultiMap" in content
     assert "static fromJson(obj: { [key: string]: ContentMultiMapJsonValue }): FqnContentMultiMap" in content
 

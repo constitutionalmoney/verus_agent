@@ -13,3 +13,11 @@ env/
 .DS_Store
 Thumbs.db
 .vscode/
+
+# Local operator activation and mutation state
+LOCAL_OPERATOR.md
+activation-profile.local.json
+operator-approval.local.json
+*.outbox.sqlite
+*.outbox.sqlite-shm
+*.outbox.sqlite-wal

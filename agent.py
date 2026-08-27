@@ -39,11 +39,19 @@ from verus_agent.mcp_client import (
     MCPRouter,
     MCPServerName,
     MCP_EXCLUSIVE_TOOLS,
-    WRITE_CAPABILITIES,
+    WRITE_CAPABILITIES as MCP_WRITE_CAPABILITIES,
 )
 from verus_agent.mobile import VerusMobileHelper
 from verus_agent.provenance import VerusProvenanceManager
 from verus_agent.reputation import VerusReputationSystem
+from verus_agent.runtime_policy import (
+    ActivationProfile,
+    ApprovalStore,
+    MutationOutbox,
+    mutation_scope,
+    requires_mutation_authorization,
+    validate_confirmed_result,
+)
 from verus_agent.storage import VerusStorageManager
 from verus_agent.swarm_security import VerusSwarmSecurity
 from verus_agent.vdxf_builder import ContentMultiMapBuilder, DataDescriptorBuilder
@@ -207,6 +215,16 @@ class VerusBlockchainAgent:
         # Capability dispatch table
         self._capability_handlers: Dict[str, Any] = {}
 
+        # Cross-project activation, per-mutation approval, idempotency, and
+        # single-writer state. The durable outbox is opened lazily only for an
+        # approved mutation.
+        self.activation_profile = ActivationProfile.from_path(
+            self.config.activation_profile_path
+        )
+        self.approval_store = ApprovalStore(self.config.mutation_approval_path)
+        self.mutation_outbox = MutationOutbox(self.config.mutation_outbox_path)
+        self._mutation_lock = asyncio.Lock()
+
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
@@ -342,30 +360,76 @@ class VerusBlockchainAgent:
         logger.info("Processing task %s: %s", task_id, capability)
 
         try:
-            # --- MCP routing: prefer MCP for safety-critical operations ---
-            mcp_result = None
-            if self.mcp_router and self.mcp_router.should_route_to_mcp(capability):
-                mcp_result = await self.mcp_router.route_capability(capability, dict(params))
+            handler = self._capability_handlers.get(capability)
+            if not handler:
+                raise ValueError(f"Unknown capability: {capability}")
+            if not isinstance(params, dict):
+                raise ValueError("Task params must be an object")
 
-            if mcp_result is not None and mcp_result.success:
-                # MCP handled it successfully
-                result = mcp_result.content
-                if isinstance(result, str):
-                    result = {"result": result}
-                elif not isinstance(result, dict):
-                    result = {"result": result}
-                result["_routed_via"] = "mcp"
-            elif mcp_result is not None and not mcp_result.success and capability in WRITE_CAPABILITIES:
-                # Write operation failed via MCP — do NOT fall back (safety)
-                raise RuntimeError(
-                    f"MCP write operation failed (no CLI fallback for safety): {mcp_result.error}"
+            self.activation_profile.ensure_task_allowed(capability, params)
+            needs_authorization = requires_mutation_authorization(capability, params)
+            grant = None
+            idempotency_key = ""
+            if needs_authorization:
+                idempotency_key = task.get("idempotency_key", "")
+                if not isinstance(idempotency_key, str) or len(idempotency_key) < 16:
+                    raise ValueError("Mutation task requires an idempotency_key of at least 16 characters")
+                grant = self.approval_store.authorize(
+                    task_id=task_id,
+                    capability=capability,
+                    network=self.config.network.value,
+                    idempotency_key=idempotency_key,
                 )
+
+            async def _dispatch() -> Any:
+                """Route a task after activation and approval checks."""
+
+                # --- MCP routing: prefer MCP for safety-critical operations ---
+                mcp_result = None
+                if self.mcp_router and self.mcp_router.should_route_to_mcp(capability):
+                    mcp_result = await self.mcp_router.route_capability(capability, dict(params))
+
+                if mcp_result is not None and mcp_result.success:
+                    routed = mcp_result.content
+                    if isinstance(routed, str):
+                        routed = {"result": routed}
+                    elif not isinstance(routed, dict):
+                        routed = {"result": routed}
+                    routed["_routed_via"] = "mcp"
+                    return routed
+                if (
+                    mcp_result is not None
+                    and not mcp_result.success
+                    and capability in MCP_WRITE_CAPABILITIES
+                ):
+                    raise RuntimeError(
+                        "MCP write operation failed; direct fallback is prohibited"
+                    )
+                return await handler(**params)
+
+            if needs_authorization:
+                async with self._mutation_lock:
+                    replay = self.mutation_outbox.claim(
+                        idempotency_key, capability, params
+                    )
+                    if replay is not None:
+                        result = replay
+                    else:
+                        try:
+                            # Re-check the live daemon immediately before each
+                            # new mutation. Initialization evidence can become
+                            # stale and is not sufficient write authorization.
+                            await self.cli.verify_mutation_readiness()
+                            with mutation_scope(grant):
+                                result = await _dispatch()
+                            validate_confirmed_result(capability, result)
+                            self.mutation_outbox.complete(idempotency_key, result)
+                        except Exception:
+                            self.mutation_outbox.fail(idempotency_key)
+                            raise
             else:
-                # Direct CLI path (fallback or MCP not available)
-                handler = self._capability_handlers.get(capability)
-                if not handler:
-                    raise ValueError(f"Unknown capability: {capability}")
-                result = await handler(**params)
+                result = await _dispatch()
+
             elapsed = (time.monotonic() - start) * 1000
             self._total_processing_ms += elapsed
             self.tasks_completed += 1
@@ -419,7 +483,8 @@ class VerusBlockchainAgent:
             "intelligence_level": self.intelligence_level,
             "network": self.config.network.value,
             "daemon_version": self.cli.daemon_version if self.cli else None,
-            "capabilities": AGENT_CAPABILITIES,
+            "capabilities": self._active_capabilities(),
+            "implemented_capabilities": AGENT_CAPABILITIES,
             "metrics": {
                 "tasks_completed": self.tasks_completed,
                 "tasks_failed": self.tasks_failed,
@@ -444,6 +509,11 @@ class VerusBlockchainAgent:
                 "marketplace": self.marketplace.get_marketplace_status() if self.marketplace else {"enabled": False},
                 "ip_protection": self.ip_protection.get_protection_status() if self.ip_protection else {"enabled": False},
                 "mcp": self.mcp_router.get_status() if self.mcp_router else {"enabled": False},
+            },
+            "activation": {
+                "profile_id": self.activation_profile.profile_id,
+                "stage": self.activation_profile.stage.value,
+                "network": self.activation_profile.network,
             },
         }
 
@@ -689,6 +759,8 @@ class VerusBlockchainAgent:
                 "verus.mobile.generic_request_link": self._handle_mobile_generic_request_link,
                 "verus.mobile.identity_update_request_link": self._handle_mobile_identity_update_request_link,
                 "verus.mobile.app_encryption_request_link": self._handle_mobile_app_encryption_request_link,
+                "verus.mobile.user_data_request_link": self._handle_mobile_user_data_request_link,
+                "verus.mobile.data_packet_request_link": self._handle_mobile_data_packet_request_link,
                 "verus.mobile.capabilities": self._handle_mobile_capabilities,
             })
 
@@ -759,9 +831,12 @@ class VerusBlockchainAgent:
         result = await self.identity_manager.update_identity(
             name=params["name"],
             updates=params["updates"],
+            poll_interval=params.get("poll_interval", 5.0),
+            max_polls=params.get("max_polls", 120),
         )
         return {"operation": result.operation, "success": result.success,
-                "txid": result.txid, "error": result.error}
+                "txid": result.txid, "error": result.error,
+                "readback_verified": result.data.get("readback_verified", False)}
 
     async def _handle_identity_vault(self, **params) -> Dict[str, Any]:
         self.state = VerusAgentState.MANAGING_IDENTITY
@@ -804,9 +879,12 @@ class VerusBlockchainAgent:
             amount=params["amount"],
             from_address=params.get("from_address"),
             vdxf_tag=params.get("vdxf_tag"),
+            poll_interval=params.get("poll_interval", 5.0),
+            max_polls=params.get("max_polls", 120),
         )
         return {"operation": result.operation, "success": result.success,
-                "txid": result.txid, "error": result.error}
+                "txid": result.txid, "opid": result.opid,
+                "confirmed": result.confirmed, "error": result.error}
 
     async def _handle_currency_estimate(self, **params) -> Dict[str, Any]:
         self.state = VerusAgentState.EXECUTING_DEFI
@@ -1115,11 +1193,30 @@ class VerusBlockchainAgent:
             output["exportto"] = params["exportto"]
 
         try:
-            txid = await self.cli.sendcurrency(
+            opid = await self.cli.sendcurrency(
                 params.get("from_address", self.config.destination_address),
                 [output],
             )
-            return {"success": True, "txid": txid}
+            status = await self.cli.await_operation(
+                str(opid),
+                poll_interval=params.get("poll_interval", 5.0),
+                max_polls=params.get("max_polls", 120),
+            )
+            terminal_result = status.get("result") if isinstance(status.get("result"), dict) else {}
+            txid = terminal_result.get("txid")
+            if status.get("status") != "success" or not txid:
+                return {
+                    "success": False,
+                    "opid": str(opid),
+                    "confirmed": False,
+                    "error": f"bridge operation ended with status '{status.get('status')}'",
+                }
+            return {
+                "success": True,
+                "opid": str(opid),
+                "txid": txid,
+                "confirmed": True,
+            }
         except VerusError as exc:
             return {"success": False, "error": str(exc)}
 
@@ -1335,7 +1432,7 @@ class VerusBlockchainAgent:
         result = await self.marketplace.create_invoice(
             product_identity=params["product_identity"],
             amount=params["amount"],
-            currency=params.get("currency", "VRSC"),
+            currency=params.get("currency", "VRSCTEST"),
             buyer_identity=params.get("buyer_identity", ""),
             memo=params.get("memo", ""),
             destination=params.get("destination", ""),
@@ -1452,7 +1549,7 @@ class VerusBlockchainAgent:
             basket_name=params["basket_name"],
             amount=params["amount"],
             from_address=params["from_address"],
-            currency=params.get("currency", "VRSC"),
+            currency=params.get("currency", "VRSCTEST"),
         )
         return {"success": result.success, "txid": result.txid, "error": result.error}
 
@@ -1576,6 +1673,8 @@ class VerusBlockchainAgent:
             detail_types=params.get("detail_types"),
             requires_experimental=params.get("requires_experimental", False),
             legacy_fallback_uri=params.get("legacy_fallback_uri", ""),
+            response_endpoint=params.get("response_endpoint", ""),
+            allow_insecure_http=params.get("allow_insecure_http", False),
         )
         return {
             "success": result.success,
@@ -1605,6 +1704,45 @@ class VerusBlockchainAgent:
             compact_payload=params["compact_payload"],
             requests_secret_key_material=params.get("requests_secret_key_material", False),
             legacy_fallback_uri=params.get("legacy_fallback_uri", ""),
+        )
+        return {
+            "success": result.success,
+            "uri": result.uri,
+            "qr_data": result.qr_data,
+            "data": result.data,
+            "error": result.error,
+        }
+
+    def _active_capabilities(self) -> List[str]:
+        """Capabilities both implemented and enabled by the active profile."""
+
+        return sorted(
+            capability
+            for capability in self._capability_handlers
+            if self.activation_profile.capability_is_activatable(capability)
+        )
+
+    async def _handle_mobile_user_data_request_link(self, **params) -> Dict[str, Any]:
+        """Wrap a wallet-reviewed UserDataRequest payload."""
+        result = self.mobile_helper.generate_user_data_request_link(
+            compact_payload=params["compact_payload"],
+            response_endpoint=params.get("response_endpoint", ""),
+            allow_insecure_http=params.get("allow_insecure_http", False),
+        )
+        return {
+            "success": result.success,
+            "uri": result.uri,
+            "qr_data": result.qr_data,
+            "data": result.data,
+            "error": result.error,
+        }
+
+    async def _handle_mobile_data_packet_request_link(self, **params) -> Dict[str, Any]:
+        """Wrap a wallet-reviewed DataPacketRequest payload."""
+        result = self.mobile_helper.generate_data_packet_request_link(
+            compact_payload=params["compact_payload"],
+            response_endpoint=params.get("response_endpoint", ""),
+            allow_insecure_http=params.get("allow_insecure_http", False),
         )
         return {
             "success": result.success,
@@ -1779,7 +1917,7 @@ class VerusBlockchainAgent:
         """Register this agent with the UAI swarm coordinator."""
         registration = {
             "agent_id": self.agent_id,
-            "capabilities": AGENT_CAPABILITIES,
+            "capabilities": self._active_capabilities(),
             "priority": self.config.agent_priority,
             "agent_type": self.agent_type,
             "domain": self.domain,

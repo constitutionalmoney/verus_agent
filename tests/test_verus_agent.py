@@ -28,7 +28,11 @@ from verus_agent.cli_wrapper import (
     CLIResult,
     VerusAPIError,
     VerusCLI,
+    VerusNetworkError,
+    VerusReadinessError,
+    VerusVersionError,
 )
+from verus_agent.runtime_policy import PolicyViolation
 from verus_agent.verusid import VerusIdentity, VerusIDManager
 from verus_agent.defi import VerusDeFiManager, ConversionEstimate
 from verus_agent.login import VerusLoginManager
@@ -53,8 +57,8 @@ def config():
 def mock_cli(config):
     cli = VerusCLI(config)
     cli._backend = "api"
-    cli._daemon_version_str = "1.2.14-2"
-    cli._daemon_version = 1021400
+    cli._daemon_version_str = "1.2.17-6"
+    cli._daemon_version = 1021700
     return cli
 
 
@@ -74,18 +78,22 @@ class TestVerusConfig:
         assert cfg.is_testnet
         assert not cfg.is_mainnet
 
-    def test_mainnet_config(self):
-        cfg = VerusConfig(network=VerusNetwork.MAINNET)
-        assert cfg.is_mainnet
-        assert cfg.api_url == API_ENDPOINTS[VerusNetwork.MAINNET]
+    def test_mainnet_config_is_rejected(self):
+        with pytest.raises(ValueError, match="Mainnet is disabled"):
+            VerusConfig(network="mainnet")  # type: ignore[arg-type]
+
+    def test_unknown_network_environment_is_rejected(self, monkeypatch):
+        monkeypatch.setenv("VERUS_NETWORK", "unknown-chain")
+        with pytest.raises(ValueError, match="must be testnet"):
+            VerusConfig()
 
     def test_agent_id(self):
         cfg = VerusConfig()
         assert cfg.agent_id == AGENT_ID
 
-    def test_uai_integration_default_enabled(self):
+    def test_uai_integration_default_disabled(self):
         cfg = VerusConfig()
-        assert cfg.uai_integration_enabled is True
+        assert cfg.uai_integration_enabled is False
 
     def test_uai_integration_env_override(self, monkeypatch):
         monkeypatch.setenv("VERUS_UAI_INTEGRATION_ENABLED", "false")
@@ -118,7 +126,7 @@ class TestVerusCLI:
         mock_response = MagicMock()
         mock_response.status = 200
         mock_response.text = AsyncMock(return_value=json.dumps({
-            "jsonrpc": "2.0", "id": 1, "result": {"version": 1021400}
+            "jsonrpc": "2.0", "id": 1, "result": {"version": 1021700}
         }))
         mock_response.__aenter__ = AsyncMock(return_value=mock_response)
         mock_response.__aexit__ = AsyncMock(return_value=False)
@@ -129,7 +137,7 @@ class TestVerusCLI:
         mock_cli._session = mock_session
 
         result = await mock_cli.call("getinfo")
-        assert result.result == {"version": 1021400}
+        assert result.result == {"version": 1021700}
         assert result.method == "getinfo"
         assert result.elapsed_ms >= 0
         mock_session.post.assert_called_once()
@@ -151,48 +159,131 @@ class TestVerusCLI:
 
         with pytest.raises(VerusAPIError) as exc_info:
             await mock_cli.call("getidentity", ["nonexistent@"])
-        assert "Identity not found" in str(exc_info.value)
+        assert "RPC endpoint returned an error" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_unknown_rpc_requires_authorization(self, mock_cli):
+        with pytest.raises(PolicyViolation, match="requires mutation authorization"):
+            await mock_cli.call("unreviewed_rpc", [])
+
+    @pytest.mark.asyncio
+    async def test_updateidentity_wrapper_preserves_current_multimap(self, mock_cli):
+        mock_cli.getidentity = AsyncMock(return_value={
+            "identity": {"contentmultimap": {"keep": [{"data": "old"}]}}
+        })
+        mock_cli.call = AsyncMock(return_value=make_cli_result("updateidentity", "txid"))
+
+        result = await mock_cli.updateidentity({
+            "name": "Agent@",
+            "contentmultimap": {"new": [{"data": "value"}]},
+        })
+
+        assert result == "txid"
+        serialized = mock_cli.call.await_args.args[1][0]
+        assert json.loads(serialized)["contentmultimap"] == {
+            "keep": [{"data": "old"}],
+            "new": [{"data": "value"}],
+        }
 
     @pytest.mark.asyncio
     async def test_verify_daemon_version_accepts_revision(self, config):
-        """Daemon string with revision (e.g. '1.2.14-2') should be accepted when
-        MIN_DAEMON_VERSION_STR is '1.2.14-2'."""
+        """The verified current release including revision is accepted."""
         cli = VerusCLI(config)
         cli._backend = "api"
 
-        # Mock getinfo to return string version with revision
-        cli.getinfo = AsyncMock(return_value={"version": "1.2.14-2"})
+        # Official getinfo supplies numeric version and revision-bearing
+        # VRSCversion. The latter must take precedence.
+        cli.getinfo = AsyncMock(return_value={
+            "version": 1021700,
+            "VRSCversion": "1.2.17-6",
+            "testnet": True,
+        })
         await cli._verify_daemon_version()
-        assert cli._daemon_version_str == "1.2.14-2"
+        assert cli._daemon_version_str == "1.2.17-6"
         # Numeric encoding remains for major.minor.patch
-        assert cli._daemon_version == 1021400
-        assert getattr(cli, "_daemon_revision", 0) == 2
+        assert cli._daemon_version == 1021700
+        assert getattr(cli, "_daemon_revision", 0) == 6
 
     @pytest.mark.asyncio
     async def test_verify_daemon_version_rejects_missing_revision(self, config):
-        """Daemon reporting '1.2.14' (no revision) should be rejected when the
-        configured minimum requires '1.2.14-2'."""
+        """Daemon without the required release revision is rejected."""
         cli = VerusCLI(config)
         cli._backend = "api"
 
         # Mock getinfo to return string version without revision
-        cli.getinfo = AsyncMock(return_value={"version": "1.2.14"})
+        cli.getinfo = AsyncMock(return_value={
+            "VRSCversion": "1.2.17",
+            "testnet": True,
+        })
         with pytest.raises(Exception) as exc_info:
             await cli._verify_daemon_version()
         assert "Please upgrade" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_verify_daemon_version_rejects_integer_without_revision(self, config):
-        """Integer-encoded version (1021400) should also be rejected when the
-        configured minimum requires a revision suffix (1.2.14-2)."""
+        """Integer-only version is rejected when a revision is required."""
         cli = VerusCLI(config)
         cli._backend = "api"
 
         # Mock getinfo to return integer-encoded version (no revision)
-        cli.getinfo = AsyncMock(return_value={"version": 1021400})
+        cli.getinfo = AsyncMock(return_value={
+            "version": 1021700,
+            "testnet": True,
+        })
         with pytest.raises(Exception) as exc_info:
             await cli._verify_daemon_version()
         assert "Please upgrade" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_verify_daemon_version_rejects_missing_version(self, config):
+        cli = VerusCLI(config)
+        cli.getinfo = AsyncMock(return_value={"testnet": True})
+        with pytest.raises(VerusVersionError, match="refusing to initialize"):
+            await cli._verify_daemon_version()
+
+    @pytest.mark.asyncio
+    async def test_verify_daemon_rejects_mainnet_or_unproven_network(self, config):
+        cli = VerusCLI(config)
+        cli.getinfo = AsyncMock(return_value={
+            "VRSCversion": "1.2.17-6",
+            "testnet": False,
+        })
+        with pytest.raises(VerusNetworkError, match="Testnet"):
+            await cli._verify_daemon_version()
+
+        cli.getinfo = AsyncMock(return_value={"VRSCversion": "1.2.17-6"})
+        with pytest.raises(VerusNetworkError, match="Testnet"):
+            await cli._verify_daemon_version()
+
+    @pytest.mark.asyncio
+    async def test_mutation_readiness_requires_synced_connected_testnet(self, config):
+        cli = VerusCLI(config)
+        ready = {
+            "VRSCversion": "1.2.17-6",
+            "testnet": True,
+            "blocks": 100,
+            "longestchain": 100,
+            "connections": 4,
+        }
+        cli.getinfo = AsyncMock(return_value=ready)
+        result = await cli.verify_mutation_readiness()
+        assert result["network"] == "testnet"
+        assert result["blocks"] == 100
+
+        cli.getinfo = AsyncMock(return_value={**ready, "blocks": 99})
+        with pytest.raises(VerusReadinessError, match="not synchronized"):
+            await cli.verify_mutation_readiness()
+
+        cli.getinfo = AsyncMock(return_value={**ready, "connections": 0})
+        with pytest.raises(VerusReadinessError, match="no verified peer"):
+            await cli.verify_mutation_readiness()
+
+    @pytest.mark.asyncio
+    async def test_verify_daemon_version_rejects_connectivity_failure(self, config):
+        cli = VerusCLI(config)
+        cli.getinfo = AsyncMock(side_effect=VerusAPIError("getinfo", "offline"))
+        with pytest.raises(VerusVersionError, match="refusing to initialize"):
+            await cli._verify_daemon_version()
 
     def test_avg_latency_zero_when_no_calls(self, mock_cli):
         assert mock_cli.avg_latency_ms == 0.0
@@ -248,6 +339,40 @@ class TestVerusIDManager:
         assert result.success
         assert result.txid == "register_txid_456"
         assert result.operation == "create"
+
+    @pytest.mark.asyncio
+    async def test_update_identity_preserves_contentmultimap_and_verifies_readback(
+        self, id_mgr, mock_cli
+    ):
+        after = {
+            "identity": {
+                "name": "Agent",
+                "contentmultimap": {
+                    "keep": [{"data": "old"}],
+                    "new": [{"data": "value"}],
+                },
+            }
+        }
+        submitted_identity = {
+            "name": "Agent@",
+            "contentmultimap": after["identity"]["contentmultimap"],
+        }
+        mock_cli.getidentity = AsyncMock(return_value=after)
+        mock_cli.updateidentity_with_snapshot = AsyncMock(
+            return_value=("identity_txid", submitted_identity)
+        )
+
+        result = await id_mgr.update_identity(
+            "Agent@",
+            {"contentmultimap": {"new": [{"data": "value"}]}},
+            poll_interval=0,
+            max_polls=1,
+        )
+
+        assert result.success is True
+        assert result.data["readback_verified"] is True
+        requested = mock_cli.updateidentity_with_snapshot.await_args.args[0]
+        assert requested["contentmultimap"] == {"new": [{"data": "value"}]}
 
     @pytest.mark.asyncio
     async def test_lock_vault(self, id_mgr, mock_cli):
@@ -318,11 +443,20 @@ class TestVerusDeFiManager:
 
     @pytest.mark.asyncio
     async def test_convert(self, defi, mock_cli):
-        mock_cli.sendcurrency = AsyncMock(return_value="conv_txid_789")
+        mock_cli.sendcurrency = AsyncMock(return_value="opid-convert")
+        mock_cli.z_getoperationstatus = AsyncMock(return_value=[{
+            "id": "opid-convert",
+            "status": "success",
+            "result": {"txid": "conv_txid_789"},
+        }])
 
-        result = await defi.convert("VRSC", "tBTC.vETH", 10.0, via="Floralis")
+        result = await defi.convert(
+            "VRSC", "tBTC.vETH", 10.0, via="Floralis", poll_interval=0, max_polls=1
+        )
         assert result.success
         assert result.txid == "conv_txid_789"
+        assert result.opid == "opid-convert"
+        assert result.confirmed is True
 
     @pytest.mark.asyncio
     async def test_convert_no_destination(self, mock_cli):
@@ -508,12 +642,15 @@ class TestVerusBlockchainAgent:
             assert agent.defi_manager is not None
             assert agent.login_manager is not None
             assert agent.storage_manager is not None
+            active = agent.get_status()["capabilities"]
+            assert "verus.identity.get" in active
+            assert "verus.currency.send" not in active
 
     def test_get_status(self, agent):
         agent.state = VerusAgentState.IDLE
         agent.start_time = datetime.now()
         agent.cli = MagicMock()
-        agent.cli.daemon_version = "1.2.14-2"
+        agent.cli.daemon_version = "1.2.17-6"
         agent.cli.avg_latency_ms = 5.0
         agent.cli.call_count = 10
         agent.login_manager = MagicMock()
@@ -523,9 +660,10 @@ class TestVerusBlockchainAgent:
         assert status["agent_id"] == AGENT_ID
         assert status["state"] == "idle"
         assert status["network"] == "testnet"
-        # number of advertised capabilities can grow over time;
-        # we only require the original baseline to be present.
-        assert len(status["capabilities"]) >= 14
+        # Before initialization no handlers are active, while the implemented
+        # source inventory remains available for diagnostics.
+        assert status["capabilities"] == []
+        assert len(status["implemented_capabilities"]) >= 14
         assert status["metrics"]["cli_call_count"] == 10
 
     @pytest.mark.asyncio

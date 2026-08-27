@@ -1,0 +1,31 @@
+{
+  "profile_id": "replace-with-project-slug",
+  "stage": "wallet_review",
+  "network": "testnet",
+  "canonical_store": "Declare the application's canonical database or source of truth.",
+  "actor_model": "Declare which human and service actors may request each capability.",
+  "private_data_boundary": "Use synthetic data until the project's privacy review is complete.",
+  "non_goals": [
+    "Mainnet",
+    "production deployment",
+    "autonomous blockchain writes",
+    "wallet approval simulation"
+  ],
+  "allowed_capabilities": [
+    "verus.identity.get",
+    "verus.currency.estimate",
+    "verus.mobile.capabilities",
+    "verus.mobile.generic_request_link",
+    "verus.mobile.user_data_request_link",
+    "verus.mobile.data_packet_request_link"
+  ],
+  "allowed_rpc_methods": [
+    "getinfo",
+    "getblockcount",
+    "getidentity",
+    "getidentitycontent",
+    "getcurrencystate",
+    "estimateconversion",
+    "z_getoperationstatus"
+  ]
+}

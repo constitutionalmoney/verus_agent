@@ -1,5 +1,9 @@
 # Verus Mobile 1.0.1 Integration Guide
 
+> **Archived mobile snapshot:** For current public capabilities, use
+> `docs/VERUS_MOBILE_V1.1.0-14.md`. This older guide remains research evidence
+> and is not proof of current wallet behavior or activation authority.
+
 This document captures the Verus Mobile 1.0.1 capability update so the Verus Development Agent can guide app builders on when mobile can replace desktop workflows.
 
 ## Release Targets

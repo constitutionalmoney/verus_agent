@@ -1106,32 +1106,51 @@ class VerusIPProtection:
                     "memo": memo_hex,
                 }],
             )
-
-            logger.info(
-                "Sapling encrypted key delivery for %s → opid=%s",
-                model_identity, opid,
-            )
+            status = await self.cli.await_operation(str(opid))
+            terminal_result = status.get("result") if isinstance(status.get("result"), dict) else {}
+            txid = terminal_result.get("txid")
+            if status.get("status") != "success" or not txid:
+                return IPProtectionResult(
+                    operation="store_encrypted_key_sapling",
+                    success=False,
+                    model_identity=model_identity,
+                    error=f"Sapling operation ended with status '{status.get('status')}'",
+                    data={"opid": str(opid)},
+                )
 
             # Also store the z-address reference on-chain so the model
             # identity points to where the encrypted key was sent
-            await self.identity_manager.update_identity(
+            identity_result = await self.identity_manager.update_identity(
                 model_identity,
-                content_multimap={
-                    VDXF_STORAGE_KEY_ENC: [{"": json.dumps({
-                        "method": "sapling_memo",
-                        "z_address": z_address,
-                        "opid": opid,
-                    })}],
+                {
+                    "contentmultimap": {
+                        VDXF_STORAGE_KEY_ENC: [{"": json.dumps({
+                            "method": "sapling_memo",
+                            "z_address": z_address,
+                            "opid": str(opid),
+                        })}],
+                    },
                 },
             )
+            if not identity_result.success:
+                return IPProtectionResult(
+                    operation="store_encrypted_key_sapling",
+                    success=False,
+                    model_identity=model_identity,
+                    txid=txid,
+                    error="Key delivery confirmed but identity readback was not verified",
+                    data={"opid": str(opid)},
+                )
 
             return IPProtectionResult(
                 operation="store_encrypted_key_sapling",
                 success=True,
                 model_identity=model_identity,
+                txid=txid,
                 data={
                     "z_address": z_address,
-                    "opid": opid,
+                    "opid": str(opid),
+                    "confirmed": True,
                     "memo_length": len(memo_payload),
                 },
             )

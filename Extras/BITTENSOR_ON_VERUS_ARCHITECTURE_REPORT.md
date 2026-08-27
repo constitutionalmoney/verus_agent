@@ -282,7 +282,7 @@ verus -chain= UAI-Tensor registeridentity '{
     "minimumsignatures": 1,
     "contentmultimap": {
       "vt::neuron.type": [{"data": "miner"}],
-      "vt::neuron.axon": [{"data": "131.186.56.85:8091"}],
+      "vt::neuron.axon": [{"data": "validator.example.invalid:8091"}],
       "vt::neuron.registered_block": [{"data": "12345"}],
       "vt::neuron.model_hash": [{"data": "sha256:abcdef..."}]
     }

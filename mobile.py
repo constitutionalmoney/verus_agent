@@ -27,7 +27,7 @@ Architecture (from Issue #9 §6 / extends Issue #8):
 
 Toggle via config:  ``VERUS_MOBILE_ENABLED=true``
 
-Mobile Wallet UI Routing (from developer discussion):
+Mobile Wallet UI Routing (official Android v1.1.0-14 capability snapshot):
     The Verus Mobile wallet renders **different UI pages** depending on the
     VDXF key type in the GenericRequest ``details[]`` array:
 
@@ -36,9 +36,9 @@ Mobile Wallet UI Routing (from developer discussion):
     | AUTHENTICATION_REQUEST_VDXF_KEY         | Login / Auth page     | ✅ Supported  |
     | IDENTITY_UPDATE_REQUEST_VDXF_KEY        | ID Update confirm     | ✅ Supported  |
     | VERUSPAY_INVOICE_DETAILS_VDXF_KEY       | Payment / Invoice     | ✅ Supported  |
-    | APP_ENCRYPTION_REQUEST_VDXF_KEY         | App Encryption        | ⚠️ Partial   |
-    | DATA_PACKET_REQUEST_VDXF_KEY            | Data Packet           | ❓ Unknown   |
-    | USER_DATA_REQUEST_VDXF_KEY              | User Data             | ❓ Unknown   |
+    | APP_ENCRYPTION_REQUEST_VDXF_KEY         | App Encryption        | Release-unverified |
+    | DATA_PACKET_REQUEST_VDXF_KEY            | Data Packet           | Experimental |
+    | USER_DATA_REQUEST_VDXF_KEY              | User Data             | Experimental |
 
     There is NO generic catch-all page — each detail type maps to a specific
     wallet page. Login, updateidentity, and invoices all have different UIs.
@@ -57,11 +57,13 @@ VDXF Tags (vdxftag) for Payment Tracking:
     - No VerusID required to use vdxftags — works with any address
     - Supported in: sendcurrency, currency conversions, VerusPay QR codes
     - Privacy note: tagging LINKS transactions; use separate addresses for privacy
-    - Coming soon: vdxftag in next Verus Mobile VerusPay release
+    Release capabilities must be verified against the target wallet build and
+    current device before use; this helper does not simulate wallet approval.
 
 References:
     - Issue #9: VerusID as LLM/SLM Container, Security Layer & Monetization Engine
     - Issue #8: Verus Mobile wallet integration
+    - v1.1.0-14: https://github.com/VerusCoin/Verus-Mobile/releases/tag/v1.1.0-14
     - VerusPay: https://docs.verus.io/verusid/veruspay/
     - LoginConsentRequest: https://docs.verus.io/verusid/loginconsentrequest/
     - @bitgo/utxo-lib: https://www.npmjs.com/package/@bitgo/utxo-lib (QR generation)
@@ -80,7 +82,7 @@ import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlparse
 
 from verus_agent.config import VERUS_MOBILE_WALLET_CAPABILITIES
 
@@ -104,7 +106,6 @@ GENERIC_REQUEST_URI_PREFIX = "verus://1/"
 
 class PaymentNetwork(str, Enum):
     """Verus payment networks."""
-    VRSC = "VRSC"
     VRSCTEST = "vrsctest"
 
 
@@ -113,7 +114,7 @@ class PaymentURI:
     """A VerusPay-compatible payment URI."""
     address: str
     amount: Optional[float] = None
-    currency: str = "VRSC"
+    currency: str = "VRSCTEST"
     label: str = ""
     message: str = ""
     memo: str = ""
@@ -159,18 +160,28 @@ class VerusMobileHelper:
     Parameters
     ----------
     network : PaymentNetwork
-        Target network (VRSC mainnet or vrsctest).
+        Target network. This repository accepts VRSCTEST only.
     agent_identity : str
         The agent's VerusID (used as recipient in payment URIs).
     """
 
     def __init__(
         self,
-        network: PaymentNetwork = PaymentNetwork.VRSC,
+        network: PaymentNetwork = PaymentNetwork.VRSCTEST,
         agent_identity: str = "",
     ):
+        if network != PaymentNetwork.VRSCTEST:
+            raise ValueError("Verus Mobile helpers are Testnet-only")
         self.network = network
         self.agent_identity = agent_identity
+        self.runtime_environment = os.getenv(
+            "VERUS_RUNTIME_ENVIRONMENT", "development"
+        ).strip().lower()
+        self.insecure_http_environment_enabled = (
+            os.getenv("VERUS_MOBILE_ALLOW_INSECURE_HTTP", "false").lower()
+            in ("true", "1", "yes")
+            and self.runtime_environment in {"development", "local", "test"}
+        )
         self.enabled = os.getenv(
             "VERUS_MOBILE_ENABLED", ""
         ).lower() in ("true", "1", "yes")
@@ -183,7 +194,7 @@ class VerusMobileHelper:
         self,
         destination: str = "",
         amount: Optional[float] = None,
-        currency: str = "VRSC",
+        currency: str = "VRSCTEST",
         label: str = "",
         message: str = "",
         memo: str = "",
@@ -203,7 +214,7 @@ class VerusMobileHelper:
         amount : float, optional
             Payment amount in the specified currency.
         currency : str
-            Currency code (default "VRSC").
+            Currency code (default "VRSCTEST").
         label : str
             Short description shown in wallet.
         message : str
@@ -214,11 +225,13 @@ class VerusMobileHelper:
         dest = destination or self.agent_identity
         if not dest:
             return PaymentURI(address="", uri="", qr_data="")
+        if currency.upper() == "VRSC":
+            raise ValueError("VRSC Mainnet payment requests are disabled; use VRSCTEST")
 
         params: Dict[str, str] = {}
         if amount is not None:
             params["amount"] = f"{amount:.8f}"
-        if currency and currency != "VRSC":
+        if currency and currency != "VRSCTEST":
             params["currency"] = currency
         if label:
             params["label"] = label
@@ -333,7 +346,7 @@ class VerusMobileHelper:
         product_identity: str,
         tier: str = "basic",
         price: Optional[float] = None,
-        currency: str = "VRSC",
+        currency: str = "VRSCTEST",
         buyer_memo: str = "",
     ) -> MobileLinkResult:
         """
@@ -352,7 +365,7 @@ class VerusMobileHelper:
         price : float, optional
             Price in the specified currency.
         currency : str
-            Payment currency (default "VRSC").
+            Payment currency (default "VRSCTEST").
         buyer_memo : str
             Additional memo from the buyer.
         """
@@ -510,6 +523,8 @@ class VerusMobileHelper:
         detail_types: Optional[List[str]] = None,
         requires_experimental: bool = False,
         legacy_fallback_uri: str = "",
+        response_endpoint: str = "",
+        allow_insecure_http: bool = False,
     ) -> MobileLinkResult:
         """
         Generate a compact GenericRequest deeplink.
@@ -525,6 +540,17 @@ class VerusMobileHelper:
                 error="compact_payload is required",
             )
 
+        if response_endpoint:
+            endpoint_error = self.validate_response_endpoint(
+                response_endpoint, allow_insecure_http=allow_insecure_http
+            )
+            if endpoint_error:
+                return MobileLinkResult(
+                    operation="generic_request_link",
+                    success=False,
+                    error=endpoint_error,
+                )
+
         uri = f"{GENERIC_REQUEST_URI_PREFIX}{payload}"
         data = {
             "format": "GenericRequest",
@@ -532,9 +558,14 @@ class VerusMobileHelper:
             "detail_types": detail_types or [],
             "requires_experimental_deeplinks": bool(requires_experimental),
             "legacy_formats_still_supported": True,
+            "wallet_release": "v1.1.0-14",
+            "wallet_review_required": True,
         }
         if legacy_fallback_uri:
             data["legacy_fallback_uri"] = legacy_fallback_uri
+        if response_endpoint:
+            data["response_endpoint"] = response_endpoint
+            data["insecure_http_explicitly_enabled"] = bool(allow_insecure_http)
 
         return MobileLinkResult(
             operation="generic_request_link",
@@ -562,6 +593,74 @@ class VerusMobileHelper:
             result.data["credential_key"] = "vrsc::identity.credential"
         return result
 
+    def generate_user_data_request_link(
+        self,
+        compact_payload: str,
+        response_endpoint: str = "",
+        allow_insecure_http: bool = False,
+    ) -> MobileLinkResult:
+        """Wrap an already encoded v1.1.0-14 UserDataRequest payload.
+
+        The wallet presents requested scopes/credential details and lets the
+        user selectively respond. This helper does not build protocol payloads,
+        inspect credentials, or imply wallet approval.
+        """
+
+        result = self.generate_generic_request_link(
+            compact_payload=compact_payload,
+            detail_types=["UserDataRequest"],
+            requires_experimental=True,
+            response_endpoint=response_endpoint,
+            allow_insecure_http=allow_insecure_http,
+        )
+        if result.success:
+            result.operation = "user_data_request_link"
+            result.data["selective_response"] = True
+            result.data["signed_validated_response"] = True
+        return result
+
+    def generate_data_packet_request_link(
+        self,
+        compact_payload: str,
+        response_endpoint: str = "",
+        allow_insecure_http: bool = False,
+    ) -> MobileLinkResult:
+        """Wrap an already encoded v1.1.0-14 DataPacketRequest payload."""
+
+        result = self.generate_generic_request_link(
+            compact_payload=compact_payload,
+            detail_types=["DataPacketRequest"],
+            requires_experimental=True,
+            response_endpoint=response_endpoint,
+            allow_insecure_http=allow_insecure_http,
+        )
+        if result.success:
+            result.operation = "data_packet_request_link"
+            result.data["wallet_review_and_signature_required"] = True
+            result.data["multi_detail_response"] = True
+        return result
+
+    def validate_response_endpoint(
+        self, endpoint: str, *, allow_insecure_http: bool = False
+    ) -> str:
+        """Return an error string when a response endpoint violates policy."""
+
+        parsed = urlparse(endpoint)
+        if parsed.scheme == "https" and parsed.netloc:
+            return ""
+        if (
+            allow_insecure_http
+            and self.insecure_http_environment_enabled
+            and parsed.scheme == "http"
+            and parsed.netloc
+        ):
+            return ""
+        return (
+            "response_endpoint must use HTTPS; HTTP requires both the "
+            "allow_insecure_http request option and the environment-level "
+            "VERUS_MOBILE_ALLOW_INSECURE_HTTP gate in development/local/test"
+        )
+
     def generate_app_encryption_request_link(
         self,
         compact_payload: str,
@@ -580,6 +679,7 @@ class VerusMobileHelper:
             result.data["requires_z_seed"] = True
             result.data["requests_secret_key_material"] = bool(requests_secret_key_material)
             result.data["can_encrypt_response_descriptor"] = True
+            result.data["wallet_release_support_unverified"] = True
         return result
 
     def get_mobile_capabilities(self) -> Dict[str, Any]:

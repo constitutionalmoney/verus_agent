@@ -1,0 +1,13 @@
+.git
+.github
+.pytest_cache
+.venv
+**/__pycache__
+**/*.pyc
+LOCAL_OPERATOR.md
+*.approval.json
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+tests
+Extras

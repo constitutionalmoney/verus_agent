@@ -1,202 +1,133 @@
-# Verus Blockchain Specialist Agent
+# Verus Blockchain Specialist Agent
 
-> _Originally built as a worker for the UAI Cluster Intelligence “neural‑swarm”,  
-> this agent can also run as a **stand‑alone container** to assist in developing  
-> and operating Verus‑blockchain projects._
+`verus_agent` 0.5.0 is an executable Python 3.11 Verus specialist agent plus
+research and reference material. Source modules implement local CLI and HTTP
+JSON-RPC backends, VerusID, currency, storage, authentication, mobile, MCP,
+provenance, and optional integrations. Markdown proposals and files under
+`Extras/` are not proof that a feature is implemented or safe to activate.
 
-The `verus_agent` package wraps the Verus CLI and on‑chain services into a  
-self‑contained Python agent. When deployed inside a UAI swarm it registers with  
-the swarm coordinator and answers capability‑requests from other agents.  
-Outside UAI it exposes the same functionality via an asyncio API and is ideal  
-for containerised automation, CI pipelines, or interactive scripts.
+This is a public repository. Treat commits, history, issues, pull requests,
+logs, and artifacts as public. Never add secrets, wallet material, identities,
+balances, real participant/client data, private endpoints, infrastructure
+details, or unpublished/reconstruction-enabling intellectual property.
 
----
+## Safety state
 
-## 🚀 Key Features
+- VRSCTEST is the only accepted network. Mainnet configuration is rejected.
+- The built-in activation stage is `read_only`; UAI, MCP, marketplace, IP
+  protection, and swarm security default off.
+- Initialization fails closed unless `getinfo` positively reports Testnet and
+  its revision-bearing daemon version is at least the verified floor
+  `1.2.17-6`. The source is the official
+  [`v1.2.17-6` release](https://github.com/VerusCoin/VerusCoin/releases/tag/v1.2.17-6),
+  checked 2026-08-26. Re-verify it before live work.
+- Every new mutation re-checks Testnet, the version floor, peer connectivity,
+  and synchronization immediately before dispatch.
+- Raw RPC dispatch is limited to reviewed read-only methods. Every other RPC
+  requires a scoped mutation context.
+- Default runner allowlists contain reads only. Allowlist membership is not
+  human approval.
+- `verify_only` is observability, not authorization enforcement. MCP safeguards
+  apply only while MCP is enabled, connected, and selected for a capability.
 
-- **Verus CLI integration** with automatic JSON‑RPC and daemon‑version checks.
-- **VerusID management**: create, update, vault, revoke, trust, and query.
-- **DeFi operations**: launch currencies, convert/send/estimate, bridge, PBaaS.
-- **On‑chain storage**: encrypt & chunk data, upload to z‑addresses, retrieve.
-- **Authentication**: VerusID‑based login/validation for web/mobile flows.
-- **Market monitoring**: basket reserves, pricing alerts.
-- **Generic CLI execution** for ad‑hoc commands.
+Only `verus.identity.update` and `verus.currency.send` currently implement the
+complete Testnet write contract. They remain disabled until a project selects
+`testnet_write` and supplies an exact local approval and durable outbox. All
+other mutations fail closed through task dispatch. See
+[`docs/CROSS_PROJECT_ACTIVATION.md`](docs/CROSS_PROJECT_ACTIVATION.md).
 
-### Optional extensions (toggle via config / env vars)
+## Correct mutation semantics
 
-| Extension | Env variable | Capability examples |
-|-----------|--------------|---------------------|
-| Swarm security | `VERUS_SECURITY_LEVEL` (`verify_only`, `enforced`, `vault_protected`) | register/verify agents, revoke credentials |
-| Marketplace | `VERUS_MARKETPLACE_ENABLED=true` | list offers, create invoices, license models |
-| IP protection | `VERUS_IP_PROTECTION_ENABLED=true` | register/verify models, encrypt/decrypt weights |
-| Reputation | built‑in; enable via marketplace? | attest, query leaderboard |
-| Mobile helper | no toggle; used for payment/login URIs |
+`updateidentity` replaces the current identity UTXO's `contentmultimap`
+snapshot. The manager reads current state and preserves existing keys before
+submitting additions, executes identity writes serially, and requires
+current-state readback. Historical aggregation and explicit
+`contentmultimapremove` actions are separate behavior.
 
-(See config.py for the full list of environment overrides.)
+`sendcurrency` returns an operation ID, not a completed transaction ID. The
+manager polls `z_getoperationstatus`; success requires a terminal `success`
+state and the resulting txid. A timeout, failure, cancellation, or missing txid
+is not reported as success.
 
-### Complete capability list (as of v1.0)
+## Install
 
-```
-verus.identity.create       verus.identity.update        verus.identity.vault
-verus.currency.launch       verus.currency.convert       verus.currency.send
-verus.currency.estimate     verus.storage.store          verus.storage.retrieve
-verus.storage.store_data_wrapper
-verus.storage.store_sendcurrency
-verus.storage.retrieve_data_wrapper
-verus.login.authenticate    verus.login.validate
-verus.bridge.cross          verus.market.monitor
-verus.cli.execute
-verus.messaging.send_encrypted
-verus.messaging.receive_decrypt
-verus.mining.start
-verus.mining.info
-verus.staking.status
-verus.trust.set_identity_trust
-verus.trust.set_currency_trust
-verus.trust.get_ratings
-verus.marketplace.make_offer
-verus.marketplace.take_offer
-... (and many more including IP, reputation, PBaaS, mobile, etc.)
-```
+Python 3.11 is required. Runtime and test dependencies are resolver-locked with
+hashes.
 
----
-
-## 🛠 Installation
-
-```bash
-# clone repo if not already done
-git clone https://github.com/constitutionalmoney/verus_agent.git
-cd verus_agent
-
-# create virtualenv and install
+```powershell
 python -m venv .venv
-.venv\Scripts\activate   # Windows
-pip install -r requirements.txt  # you may need to create this with deps below
-
-# or simply `pip install .` for local development
+.\.venv\Scripts\Activate.ps1
+python -m pip install --require-hashes -r requirements.build.lock
+python -m pip install --require-hashes -r requirements.runtime.lock
+python -m pip install --no-build-isolation --no-deps .
 ```
 
-> **Dependencies** (implicit from tests & imports):  
-> `aiohttp`, `numpy`, `pytest` (dev), plus whatever the Verus CLI needs.
+For development tests, use `requirements.test.lock` instead. `pyproject.toml`
+is the packaging manifest, `uv.lock` is the complete resolution record, and the
+two exported requirements files are the pip/runtime inputs.
 
-A `Dockerfile` isn’t included, but building a container is straightforward:
+## Read-only runner
 
-```dockerfile
-FROM python:3.11-slim
-WORKDIR /app
-COPY . .
-RUN pip install .
-ENV VERUS_API_URL=https://api.verustest.net
-ENTRYPOINT ["python","-m","verus_agent.cli"]  # example entrypoint
+The smoke command initializes the agent and calls `getinfo` on an external
+Testnet API or configured local daemon. Run it only with explicit authorization
+for that external access.
+
+```powershell
+verus-agent --network testnet smoke
 ```
 
----
+Read-only task example:
 
-## ⚙ Configuration
-
-Most options are controlled via `VerusConfig` or environment variables.
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `VERUS_NETWORK` | `testnet` or `mainnet` | `testnet` |
-| `VERUS_API_URL` | Override RPC endpoint | auto‑derived |
-| `VERUS_CLI_PATH` | Path to `verus` binary | (auto) |
-| `VERUS_DESTINATION_ADDRESS` | Default address for DeFi ops | `""` |
-| `UAI_CORE_URL` / `UAI_SWARM_WS_URL` | Swarm URLs | `http://uai-core:8001` / `ws://…` |
-| `VERUS_SECURITY_LEVEL` | see above | `disabled` |
-| `VERUS_MARKETPLACE_ENABLED` | `true`/`false` | `false` |
-| `VERUS_IP_PROTECTION_ENABLED` | `true`/`false` | `false` |
-| …and others as defined in config.py.|
-
-Instantiate in code:
-
-```python
-from verus_agent import VerusConfig, VerusBlockchainAgent
-
-cfg = VerusConfig()  # picks up ENV vars too
-agent = VerusBlockchainAgent(cfg)
-await agent.initialize()
-await agent.start()   # registers with UAI swarm, if reachable
+```powershell
+verus-agent --network testnet task `
+  --task-id synthetic-read-001 `
+  --capability verus.identity.get `
+  --params-json '{"name":"Synthetic@"}'
 ```
 
-You can also use the modules individually:
+Do not place approval records or secrets in `--params-json`. Mutation approval
+is supplied only by an untracked local file and must match the task ID,
+capability, network, idempotency key, RPC method, and short validity window.
 
-```python
-from verus_agent.cli_wrapper import VerusCLI
-from verus_agent.defi import VerusDeFiManager
+## Verus Mobile v1.1.0-14
 
-cli = VerusCLI(cfg)
-await cli.initialize()
-defi = VerusDeFiManager(cli)
-await defi.send_currency("iAddr...", 10.0)
+The knowledge base now records official Android v1.1.0-14 Gift Cards, VerusPay
+V4/burn invoices, experimental User Data, Data Packet, and Identity Update
+requests, HTTPS response defaults, encrypted GenericResponses, and expanded
+validation. Helpers wrap already encoded Testnet payloads; they do not simulate
+wallet review or approval. See
+[`docs/VERUS_MOBILE_V1.1.0-14.md`](docs/VERUS_MOBILE_V1.1.0-14.md) and
+[`verus-mobile-integration.md`](verus-mobile-integration.md).
+
+## Validation lanes
+
+Mock-based unit and integration tests do not require a daemon:
+
+```powershell
+python -m pip install --require-hashes -r requirements.test.lock
+python -m pip install --no-deps .
+pytest tests/ -m "not upstream_contract"
 ```
 
----
+Upstream source-contract tests require a current checkout at
+`./verus-typescript-primitives`:
 
-## 🌐 UAI Integration
-
-When run inside a UAI cluster the agent:
-
-1. Connects to the **Neural Swarm Coordinator** via `uai_core_url`.
-2. Registers itself with an **agent‑type/role/domain** (`SPECIALIST`, `blockchain_verus`).
-3. Listens on a websocket (`swarm_ws_url`) for tasks and inter‑agent messages.
-4. Uses VerusID VDXF metadata to secure and monetise operations (marketplace, IP, security).
-
-The same codebase can run stand‑alone; simply omit UAI‑specific env vars and call  
-methods directly. A headless container can therefore serve as a Verus‑aware helper  
-in any environment.
-
----
-
-## ✅ Testing
-
-```bash
-pip install -e .
-pytest tests/          # unit tests use mocks, no daemon required
+```powershell
+pytest -m upstream_contract
 ```
 
-Upstream contract checks:
+A zero exit with all three tests skipped is not upstream validation. Active CI
+checks out the upstream repository before running this lane. External Testnet
+smoke is a separate manual GitHub workflow with an environment approval gate;
+it is not a unit test.
 
-- `tests/test_primitives_upstream_contract.py` is tagged with the `upstream_contract` marker.
-- It auto-skips when `verus-typescript-primitives/` is not cloned beside this repo.
-- Run only these checks with `pytest -m upstream_contract`.
+## Standalone container and deployment
 
-Coverage exceeds 90 % for core and extension modules.
+`Dockerfile` defines a pinned, non-root standalone runtime image.
+`docker-compose.verus-agent.yml` remains a local/runtime compose file with no
+`build:` section. Neither is an authorized Dokploy deployment contract.
 
----
-
-## 📦 Packaging & Usage
-
-- Published wheels / PyPI not yet available.
-- The `verus_agent` package exposes the following top‑level symbols:
-
-```python
-from verus_agent import (
-    VerusBlockchainAgent,
-    VerusConfig,
-    VerusCLI,
-    VerusIDManager,
-    VerusDeFiManager,
-    VerusLoginManager,
-    VerusStorageManager,
-    VerusIPProtection,
-    VerusAgentMarketplace,
-    VerusSwarmSecurity,
-    VerusReputationSystem,
-    VerusMobileHelper,
-    # …plus enums, dataclasses, helpers
-)
-```
-
----
-
-## 📝 License & Contribution
-
-This repository is maintained by **constitutionalmoney**.  
-Contributions, bug reports and feature requests are welcome via GitHub Issues/PRs.
-
----
-
-> **Note:** Although originally designed for the UAI neural‑swarm,  
-> the agent makes a fully‑functional, container‑friendly toolkit for  
-> anyone building on the Verus blockchain.
+No deployment is performed or authorized by this repository update. Feature
+branches and worktrees are never deployed. Dokploy remains blocked because no
+reviewed repository-specific deployment compose exists. See `AGENTS.md` for the
+complete source/SHA/merge/secrets contract.

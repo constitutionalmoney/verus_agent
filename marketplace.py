@@ -888,46 +888,15 @@ class VerusAgentMarketplace:
                     "raw": result_data,
                 },
             )
-        except Exception as exc:  # catch generic RPC errors as well
-            # Fallback: create a z_sendmany-based invoice record stored
-            # on-chain in the product's contentmultimap
-            logger.warning(
-                "createinvoice RPC unavailable, using on-chain memo: %s", exc
+        except Exception:
+            # Never turn a failed invoice RPC into an undocumented identity
+            # mutation. Reconciliation and a separately reviewed operation are
+            # required instead.
+            return MarketplaceResult(
+                operation="create_invoice",
+                success=False,
+                error="Invoice creation failed; mutation fallback is prohibited",
             )
-            try:
-                invoice_record = json.dumps({
-                    "type": "uai_invoice",
-                    "product": product_identity,
-                    "amount": amount,
-                    "currency": currency,
-                    "buyer": buyer_identity,
-                    "ts": datetime.now().isoformat(),
-                })
-
-                await self.identity_manager.update_identity(
-                    product_identity,
-                    content_multimap={
-                        "vrsc::uai.product.invoice": [{"": invoice_record}],
-                    },
-                )
-
-                return MarketplaceResult(
-                    operation="create_invoice",
-                    success=True,
-                    data={
-                        "fallback": True,
-                        "amount": amount,
-                        "currency": currency,
-                        "destination": dest,
-                        "buyer": buyer_identity,
-                    },
-                )
-            except VerusError as inner_exc:
-                return MarketplaceResult(
-                    operation="create_invoice",
-                    success=False,
-                    error=f"Invoice creation failed: {inner_exc}",
-                )
 
     async def create_auto_invoice(
         self,

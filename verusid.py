@@ -13,6 +13,7 @@ References:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -251,6 +252,9 @@ class VerusIDManager:
         self,
         name: str,
         updates: Dict[str, Any],
+        *,
+        poll_interval: float = 5.0,
+        max_polls: int = 120,
     ) -> VerusIDOperationResult:
         """
         Update fields on an existing VerusID.
@@ -261,23 +265,70 @@ class VerusIDManager:
             The identity name (e.g. ``MyAgent@``).
         updates : dict
             Fields to update (``primaryaddresses``, ``contentmultimap``, etc.).
+
+        The current identity is read before submission.  When
+        ``contentmultimap`` is supplied, its keys are merged into the current
+        snapshot because ``updateidentity`` replaces the current UTXO's map;
+        omitted current entries would otherwise disappear from current-state
+        reads. Historical aggregation and ``contentmultimapremove`` actions are
+        separate daemon behavior.
+
+        Success is returned only after a current-state readback contains the
+        submitted fields.  A broadcast transaction without verified readback is
+        reported as unsuccessful with its txid retained for operator diagnosis.
         """
         try:
+            submitted_updates = dict(updates)
             identity_def = {"name": name}
-            identity_def.update(updates)
-            result = await self.cli.updateidentity(identity_def)
+            identity_def.update(submitted_updates)
+            result, submitted_identity = await self.cli.updateidentity_with_snapshot(
+                identity_def
+            )
+            submitted_updates = {
+                key: value
+                for key, value in submitted_identity.items()
+                if key != "name"
+            }
+            txid = result if isinstance(result, str) else result.get("txid")
 
             # Invalidate cache
             self._cache.pop(name, None)
+
+            readback_verified = False
+            for poll_number in range(max_polls):
+                readback_rpc = await self.cli.getidentity(name)
+                readback = readback_rpc.get("identity", readback_rpc)
+                if self._updates_match_readback(submitted_updates, readback):
+                    readback_verified = True
+                    break
+                if poll_number + 1 < max_polls:
+                    await asyncio.sleep(poll_interval)
+
+            if not readback_verified:
+                return VerusIDOperationResult(
+                    operation="update",
+                    identity_name=name,
+                    success=False,
+                    txid=txid,
+                    error="Identity transaction submitted but current-state readback was not verified",
+                    data={
+                        "readback_verified": False,
+                        "submitted_fields": sorted(submitted_updates),
+                    },
+                )
 
             return VerusIDOperationResult(
                 operation="update",
                 identity_name=name,
                 success=True,
-                txid=result if isinstance(result, str) else result.get("txid"),
-                data={"updates": updates},
+                txid=txid,
+                data={
+                    "readback_verified": True,
+                    "submitted_fields": sorted(submitted_updates),
+                    "contentmultimap_preserved": "contentmultimap" in submitted_updates,
+                },
             )
-        except VerusError as exc:
+        except (VerusError, ValueError) as exc:
             logger.error("Failed to update identity '%s': %s", name, exc)
             return VerusIDOperationResult(
                 operation="update",
@@ -285,6 +336,21 @@ class VerusIDManager:
                 success=False,
                 error=str(exc),
             )
+
+    @staticmethod
+    def _updates_match_readback(
+        submitted_updates: Dict[str, Any], readback: Dict[str, Any]
+    ) -> bool:
+        """Return whether every submitted field is present in current state."""
+
+        for key, expected in submitted_updates.items():
+            actual = readback.get(key)
+            if key == "contentmultimap" and isinstance(expected, dict) and isinstance(actual, dict):
+                if any(actual.get(map_key) != map_value for map_key, map_value in expected.items()):
+                    return False
+            elif actual != expected:
+                return False
+        return True
 
     async def set_content(
         self,
