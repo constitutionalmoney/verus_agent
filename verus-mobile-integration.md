@@ -1,136 +1,76 @@
-# Verus Mobile Integration (Current Capabilities)
+# Verus Mobile integration
 
-This document tracks the Verus Mobile capabilities that should be modeled by `verus_agent` when helping design blockchain applications.
+The current knowledge-base snapshot targets the official Android
+[`v1.1.0-14`](https://github.com/VerusCoin/Verus-Mobile/releases/tag/v1.1.0-14)
+release. See [the detailed capability record](docs/VERUS_MOBILE_V1.1.0-14.md).
 
-## Release Scope Incorporated
+`VerusMobileHelper` is a Testnet-only, offline helper for URI and deep-link
+metadata. It does not encode the compact `GenericRequest` protocol payload,
+sign requests, hold wallet keys, submit blockchain transactions, or approve a
+request for the user.
 
-- iOS TestFlight release target: `1.0.1-1`
-- Android GitHub APK release tag: `v1.1.0-1`
+## Safe activation
 
-## Core Mobile Capability Upgrades
+Use the `wallet_review` activation stage before exposing mobile request links
+in another project. For that project, first declare its canonical data source,
+actor model, privacy boundary, non-goals, and smallest capability set. Then:
 
-### 1. Shielded Wallet Parity (Android + iOS)
+1. use synthetic data and VRSCTEST;
+2. generate an already encoded request link;
+3. inspect it on the exact target device and wallet build;
+4. verify requested scopes, signer, destination, amount, callback, and expiry;
+5. let the wallet present the final user review;
+6. validate the signed/encrypted response server-side;
+7. keep the feature behind its project flag until the complete flow passes.
 
-- Android now supports shielded (Sapling/Z) wallet operations via native lightwallet stack.
-- Wallet users can configure/import a Z seed:
-  - 24-word mnemonic reuse
-  - 24-word Z seed import
-  - Sapling extended spending key import
-- Wallet can derive Z addresses, track private balances, and show private tx history.
-- Z memo support is available for private recipients.
-- Sending is blocked while shielded sync is incomplete.
-- Private funds must confirm before spendability.
+A QR code, deep link, successful decode, allowlist entry, or generated request
+is not authorization.
 
-### 2. GenericRequest Deeplink Standard
+## Supported helper surfaces
 
-- Preferred deeplink format is now:
-  - `verus://1/<compact request payload>`
-- This is now the primary envelope format for app-to-wallet request workflows.
-- One request can carry multiple details.
-- Legacy deeplinks are still supported:
-  - `x-callback-url` VerusPay
-  - legacy login/deeplink styles
+```python
+from verus_agent.mobile import VerusMobileHelper
 
-### 3. Supported GenericRequest Detail Types
+helper = VerusMobileHelper(agent_identity="SyntheticAgent@")
 
-- `VerusPay v4 invoice` (includes private address support + compact payload)
-- `AuthenticationRequest` (compact login/auth request, encrypted response support)
-- `IdentityUpdateRequest` (experimental deeplinks toggle required)
-- `AppEncryptionRequest` (experimental deeplinks toggle required)
-- `DataPacketRequest` and `UserDataRequest` primitives are library-available but not fully exposed in wallet UI yet.
+capabilities = helper.get_mobile_capabilities()
 
-### 4. IdentityUpdateRequest Flow
+user_data = helper.generate_user_data_request_link(
+    compact_payload="already-encoded-test-payload",
+    response_endpoint="https://example.invalid/callback",
+)
 
-Mobile wallet flow now includes:
-
-- Request signer + target identity review
-- Change summary with high-risk deltas
-- Content changes review step
-- Authority/recovery/revocation review step
-- Payment confirmation and tx submit
-- Resulting update txid display/copy
-
-Credential protection behavior:
-
-- If `vrsc::identity.credential` is included, credential plaintext is encrypted locally before transaction creation.
-- Plaintext credential data is not sent to RPC server.
-- Z-seed/private-address compatibility is required.
-
-### 5. AppEncryptionRequest Flow
-
-Mobile wallet can now process app encryption key-material requests:
-
-- Shows requesting identity, signer system, signature time, derivation fields.
-- Can return viewing/address information.
-- Can optionally return extended spending key material only with explicit user approval.
-- If response encryption address is provided, response detail may be encrypted into a `DataDescriptor`.
-- Z seed is required for derivation.
-
-### 6. UX / Reliability Updates
-
-- iOS deeplink handling improved when app is already open.
-- VerusPay and authentication screens reworked.
-- Signer card, chain labels, timestamps, and technical detail UX improved.
-- Wallet can open compatible requests in alternate installed handler app.
-- Experimental request-type settings exposed.
-- Shielded sync and send-state messaging improved.
-
-## `verus_agent` Capability Mapping
-
-The agent now models mobile capabilities through:
-
-- `verus.mobile.payment_uri`
-- `verus.mobile.login_consent`
-- `verus.mobile.purchase_link`
-- `verus.mobile.generic_request_link`
-- `verus.mobile.identity_update_request_link`
-- `verus.mobile.app_encryption_request_link`
-- `verus.mobile.capabilities`
-
-## Builder Guidance (Desktop vs Mobile)
-
-Use Verus Mobile for:
-
-- User-approved identity updates
-- Login/auth consent and signed responses
-- Compact VerusPay invoice/payment flows
-- App-to-wallet encryption channel bootstrap flows
-- Shielded send/receive workflows where mobile UX is preferred
-
-Keep desktop/server-side components for:
-
-- Heavy automation loops
-- Backend policy/risk engines
-- Batch operations requiring non-interactive execution
-- Services that require deterministic CI/runtime environments
-
-Design pattern:
-
-1. Backend/service prepares signed GenericRequest payload.
-2. App presents `verus://1/<payload>` deeplink or QR.
-3. User reviews and approves in wallet.
-4. Wallet returns signed GenericResponse (optionally encrypted).
-5. Service verifies response and executes next step.
-
-## Launching Verus Agent Without UAI
-
-Standalone launch is supported via `docker-compose.verus-agent.yml`:
-
-- `VERUS_UAI_INTEGRATION_ENABLED=false` disables swarm registration.
-- Health endpoint is exposed on port `9124`.
-- Startup sequence:
-  1. dependency install
-  2. smoke check (`run_verus_agent_task.py ... smoke`)
-  3. long-running agent process (`python -m verus_agent.agent`)
-
-Run:
-
-```bash
-docker compose -f docker-compose.verus-agent.yml up -d
+data_packet = helper.generate_data_packet_request_link(
+    compact_payload="already-encoded-test-payload",
+    response_endpoint="https://example.invalid/callback",
+)
 ```
 
-Verify:
+The release identifies User Data, Data Packet, and Identity Update request
+routes as experimental. It does not establish current App Encryption support;
+the legacy helper remains blocked from task activation until device-level
+compatibility is reverified. HTTPS is required by default. The helper
+allows HTTP only when the caller explicitly selects `allow_insecure_http=True`
+and the process sets `VERUS_MOBILE_ALLOW_INSECURE_HTTP=true` while
+`VERUS_RUNTIME_ENVIRONMENT` is `development`, `local`, or `test`. Production
+always rejects HTTP.
 
-```bash
-docker compose -f docker-compose.verus-agent.yml ps
-```
+## VerusPay V4 and Gift Cards
+
+The release publishes VerusPay V4 invoices inside `GenericRequest`, smaller QR
+codes, burn invoices, and expanded Gift Card flows. Version 0.5.0 records these
+capabilities but does not construct or fund Gift Cards. Funding, burning,
+identity update, signing, and broadcast are mutations and require the separate
+Testnet mutation contract in `docs/CROSS_PROJECT_ACTIVATION.md`.
+
+## Response handling
+
+Treat every wallet response as untrusted input until protocol validation,
+signature verification, request correlation, scope enforcement, expiry checks,
+and replay prevention succeed. Encrypted GenericResponses reduce disclosure in
+transport but do not remove the need for authorization, privacy minimization,
+or secure server-side handling.
+
+Never store or print credentials, WIFs, keys, seed phrases, identity
+inventories, real participant data, private endpoints, or response plaintext in
+logs, prompts, tests, fixtures, Git, or CI artifacts.

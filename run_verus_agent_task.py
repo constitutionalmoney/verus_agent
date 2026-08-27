@@ -53,9 +53,9 @@ def _load_allowlist(path: Path) -> Dict[str, Any]:
 
 def _parse_network(value: str) -> VerusNetwork:
     value = value.lower().strip()
-    if value not in {"testnet", "mainnet"}:
-        raise argparse.ArgumentTypeError("--network must be one of: testnet, mainnet")
-    return VerusNetwork(value)
+    if value != "testnet":
+        raise argparse.ArgumentTypeError("--network must be testnet; Mainnet is disabled")
+    return VerusNetwork.TESTNET
 
 
 def _parse_params_json(value: str | None) -> Dict[str, Any]:
@@ -98,31 +98,22 @@ async def _run_smoke(
     agent = VerusBlockchainAgent(VerusConfig(network=network))
     try:
         await agent.initialize()
-        params = {"method": "getinfo", "params": []}
         _enforce_allowlist(
             "verus.cli.execute",
-            params,
+            {"method": "getinfo", "params": []},
             allowlist["allowed_capabilities"],
             allowlist["allowed_cli_methods"],
         )
-
-        result = await agent.process_task(
-            {
-                "task_id": "smoke-getinfo",
-                "capability": "verus.cli.execute",
-                "params": params,
-            }
-        )
+        info = await agent.cli.getinfo()
         payload = {
-            "ok": result.success,
-            "task_id": result.task_id,
-            "capability": result.capability,
-            "processing_time_ms": result.processing_time_ms,
-            "result": result.result,
-            "error": result.error,
+            "ok": True,
+            "task_id": "smoke-getinfo",
+            "capability": "verus.cli.execute",
+            "result": info,
+            "error": None,
         }
         print(json.dumps(payload, indent=2, sort_keys=True))
-        return 0 if result.success else 1
+        return 0
     finally:
         await agent.shutdown()
 
@@ -132,6 +123,12 @@ async def _run_capability(
     capability: str,
     params: Dict[str, Any],
     allowlist: Dict[str, Any],
+    *,
+    task_id: str,
+    idempotency_key: str,
+    activation_profile_path: str | None,
+    approval_path: str | None,
+    outbox_path: str | None,
 ) -> int:
     _enforce_allowlist(
         capability,
@@ -140,13 +137,22 @@ async def _run_capability(
         allowlist["allowed_cli_methods"],
     )
 
-    agent = VerusBlockchainAgent(VerusConfig(network=network))
+    agent = VerusBlockchainAgent(
+        VerusConfig(
+            network=network,
+            activation_profile_path=activation_profile_path,
+            mutation_approval_path=approval_path,
+            mutation_outbox_path=outbox_path,
+        )
+    )
     try:
         await agent.initialize()
         result = await agent.process_task(
             {
+                "task_id": task_id,
                 "capability": capability,
                 "params": params,
+                "idempotency_key": idempotency_key,
             }
         )
         payload = {
@@ -169,7 +175,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--network",
         type=_parse_network,
         default=VerusNetwork.TESTNET,
-        help="Verus network profile to use: testnet|mainnet (default: testnet)",
+        help="Verus network profile; only testnet is accepted",
     )
     parser.add_argument(
         "--allowlist-path",
@@ -187,6 +193,27 @@ def _build_parser() -> argparse.ArgumentParser:
         "--params-json",
         default="{}",
         help="Capability params as JSON object",
+    )
+    task_parser.add_argument("--task-id", required=True, help="Stable task identifier")
+    task_parser.add_argument(
+        "--idempotency-key",
+        default="",
+        help="Stable mutation idempotency key; required for writes",
+    )
+    task_parser.add_argument(
+        "--activation-profile-path",
+        default=os.getenv("VERUS_ACTIVATION_PROFILE_PATH"),
+        help="Path to a public-safe project activation profile",
+    )
+    task_parser.add_argument(
+        "--approval-path",
+        default=os.getenv("VERUS_MUTATION_APPROVAL_PATH"),
+        help="Path to an untracked local operator approval file",
+    )
+    task_parser.add_argument(
+        "--outbox-path",
+        default=os.getenv("VERUS_MUTATION_OUTBOX_PATH"),
+        help="Path to the local SQLite mutation outbox",
     )
 
     sub.add_parser("show-allowlist", help="Print loaded allowlist")
@@ -210,7 +237,19 @@ def main() -> int:
 
     if args.command == "task":
         params = _parse_params_json(args.params_json)
-        return asyncio.run(_run_capability(args.network, args.capability, params, allowlist))
+        return asyncio.run(
+            _run_capability(
+                args.network,
+                args.capability,
+                params,
+                allowlist,
+                task_id=args.task_id,
+                idempotency_key=args.idempotency_key,
+                activation_profile_path=args.activation_profile_path,
+                approval_path=args.approval_path,
+                outbox_path=args.outbox_path,
+            )
+        )
 
     parser.print_help()
     return 2

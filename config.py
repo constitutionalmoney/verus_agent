@@ -13,7 +13,6 @@ import os
 
 class VerusNetwork(str, Enum):
     """Verus network environments."""
-    MAINNET = "mainnet"
     TESTNET = "testnet"
 
 
@@ -21,7 +20,6 @@ class VerusNetwork(str, Enum):
 # API Endpoints
 # ---------------------------------------------------------------------------
 API_ENDPOINTS = {
-    VerusNetwork.MAINNET: "https://api.verus.services",
     VerusNetwork.TESTNET: "https://api.verustest.net",
 }
 
@@ -165,16 +163,22 @@ VERUSPAY_DEEP_LINK_SCHEME = "i5jtwbp6zymeay9llnraglgjqgdrffsau4"
 WALLET_ENVIRONMENTS = ["extension", "mobile", "desktop"]
 
 # ---------------------------------------------------------------------------
-# Verus Mobile Wallet Capability Snapshot (1.0.1 TestFlight / v1.1.0-1 APK)
+# Verus Mobile Wallet Capability Snapshot. Entries under ``release`` and the
+# v1.1.0-14 feature groups come from that official Android release. Legacy
+# shielded/AppEncryption notes are retained as unverified historical guidance.
 # ---------------------------------------------------------------------------
 # Used by the agent to guide app developers on when mobile can replace
 # desktop workflows.
 VERUS_MOBILE_WALLET_CAPABILITIES = {
     "release": {
-        "ios_testflight": "1.0.1-1",
-        "android_apk": "v1.1.0-1",
+        "android_apk": "v1.1.0-14",
+        "published_at": "2026-08-25",
+        "tag_commit": "3614a720aba25525f3907bdfefd8f1e271f06a62",
+        "source": "https://github.com/VerusCoin/Verus-Mobile/releases/tag/v1.1.0-14",
+        "ios_status": "not stated by this Android release",
     },
     "shielded_support": {
+        "source_status": "legacy guidance; not reverified by v1.1.0-14 release notes",
         "android_private_transactions": True,
         "ios_private_transactions": True,
         "feature_parity_ios_android": True,
@@ -196,17 +200,47 @@ VERUS_MOBILE_WALLET_CAPABILITIES = {
         ],
         "experimental_setting_required_for": [
             "IdentityUpdateRequest",
-            "AppEncryptionRequest",
+            "DataPacketRequest",
+            "UserDataRequest",
         ],
+        "legacy_unverified_for_current_release": ["AppEncryptionRequest"],
     },
     "generic_request_details": {
-        "veruspay_v4_invoice": "supported",
+        "veruspay_v4_invoice": "supported_with_burn_invoices",
         "authentication_request": "supported",
         "identity_update_request": "supported_experimental",
-        "app_encryption_request": "supported_experimental",
-        "data_packet_request": "library_ready_ui_pending",
-        "user_data_request": "library_ready_ui_pending",
+        "app_encryption_request": "legacy_helper_unverified_by_v1.1.0-14_release",
+        "data_packet_request": "supported_experimental",
+        "user_data_request": "supported_experimental",
     },
+    "gift_cards": {
+        "supported": True,
+        "capabilities": [
+            "label a card",
+            "optionally require a claim password",
+            "fund with currencies, VerusIDs, or both",
+            "monitor funding",
+            "share by QR code, link, or NFC",
+            "use one-time keys",
+        ],
+    },
+    "generic_responses": {
+        "encrypted_responses": True,
+        "signer_selection_and_verification": True,
+        "secure_response_delivery": True,
+        "https_response_endpoints_default": True,
+        "http_requires_explicit_environment_option": True,
+    },
+    "validation_expansion": [
+        "RPC",
+        "currency",
+        "identity",
+        "transaction",
+        "broadcast",
+        "gift card",
+        "credential",
+        "multi-detail",
+    ],
     "identity_update_flow": [
         "requester and target identity review",
         "change summary with high-risk highlight",
@@ -253,10 +287,12 @@ VERUS_CONNECT_LIBRARY = {
 MEMO_REQUIRES_Z_ADDRESS = True
 
 # ---------------------------------------------------------------------------
-# Minimum daemon version (v1.2.14-2 mandatory upgrade — Jan 7, 2026)
+# Minimum daemon version (current official release verified 2026-08-26)
 # ---------------------------------------------------------------------------
-MIN_DAEMON_VERSION = 1021400  # 1.2.14 → encoded as int (revision handled separately)
-MIN_DAEMON_VERSION_STR = "1.2.14-2"
+MIN_DAEMON_VERSION = 1021700  # 1.2.17 → encoded as int (revision handled separately)
+MIN_DAEMON_VERSION_STR = "1.2.17-6"
+MIN_DAEMON_VERSION_SOURCE = "https://github.com/VerusCoin/VerusCoin/releases/tag/v1.2.17-6"
+MIN_DAEMON_VERSION_VERIFIED_AT = "2026-08-26"
 
 # ---------------------------------------------------------------------------
 # Agent identity
@@ -270,6 +306,7 @@ AGENT_CATEGORY = "neural_swarm_intelligence"
 # Exposed capabilities (matches the spec in verus-blockchain-agent.md)
 # ---------------------------------------------------------------------------
 AGENT_CAPABILITIES = [
+    "verus.identity.get",
     "verus.identity.create",
     "verus.identity.update",
     "verus.identity.vault",
@@ -340,6 +377,8 @@ AGENT_CAPABILITIES = [
     "verus.mobile.generic_request_link",
     "verus.mobile.identity_update_request_link",
     "verus.mobile.app_encryption_request_link",
+    "verus.mobile.user_data_request_link",
+    "verus.mobile.data_packet_request_link",
     "verus.mobile.capabilities",
     # Phase 5: VDXF Data Pipeline (signdata, decryptdata, verifysignature)
     "verus.data.sign",
@@ -533,9 +572,9 @@ VDXF_NAMESPACE = {
     #   AUTH                → login/authentication page
     #   IDENTITY_UPDATE     → identity update confirmation page
     #   VERUSPAY_INVOICE    → payment/invoice page
-    #   APP_ENCRYPTION      → app encryption seed page (status: not fully known)
-    #   DATA_PACKET         → data packet page (status: not fully known)
-    #   USER_DATA           → user data page (status: not fully known)
+    #   APP_ENCRYPTION      → experimental app encryption flow
+    #   DATA_PACKET         → experimental review/sign flow in v1.1.0-14
+    #   USER_DATA           → experimental selective response flow in v1.1.0-14
     "AUTHENTICATION_REQUEST":       "AUTHENTICATION_REQUEST_VDXF_KEY",
     "VERUSPAY_INVOICE_DETAILS":     "VERUSPAY_INVOICE_DETAILS_VDXF_KEY",
     "IDENTITY_UPDATE_REQUEST_DETAIL": "IDENTITY_UPDATE_REQUEST_VDXF_KEY",
@@ -562,7 +601,8 @@ VDXF_NAMESPACE = {
 #   - Supported in: sendcurrency, currency conversions, VerusPay QR codes
 #   - The x-address (indexid) is derived from namespace + key + bound data
 #   - Privacy note: tagging links transactions; use separate addresses for privacy
-#   - Coming soon: vdxftag support in next Verus Mobile VerusPay release
+#   - The v1.1.0-14 release notes do not establish current vdxftag UI support;
+#     verify the exact wallet build before relying on it.
 VDXF_TAG_EXAMPLE = {
     "command": 'verus getvdxfid "namespace.vrsc::invoiceid" \'{"indexid":1002}\'',
     "result_key": "indexid",  # use the x-address (indexid), not vdxfid
@@ -799,7 +839,7 @@ class VerusConfig:
 
     # Swarm coordinator
     swarm_ws_url: str = "ws://uai-core:8001/ws/swarm"
-    uai_integration_enabled: bool = True
+    uai_integration_enabled: bool = False
 
     # Extension toggles
     security_enabled: bool = False
@@ -819,10 +859,18 @@ class VerusConfig:
     mcp_extra_chains: Optional[str] = None  # Remote daemons (name:host:port:user:pass, ...)
     mcp_bin_path: Optional[str] = None  # Directory containing verusd binary
 
+    # Cross-project activation and per-mutation operator controls. These files
+    # are local runtime inputs and must not contain secrets or be committed.
+    activation_profile_path: Optional[str] = None
+    mutation_approval_path: Optional[str] = None
+    mutation_outbox_path: Optional[str] = None
+
     # Extra CLI flags
     cli_extra_flags: Dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self):
+        if self.network != VerusNetwork.TESTNET:
+            raise ValueError("Mainnet is disabled by repository policy; use testnet")
         if self.api_url is None:
             self.api_url = API_ENDPOINTS[self.network]
         # Environment overrides
@@ -862,7 +910,9 @@ class VerusConfig:
         ).lower() in ("true", "1", "yes")
         self.mcp_chain = os.getenv("VERUS_MCP_CHAIN", self.mcp_chain)
         if not self.mcp_chain:
-            self.mcp_chain = "vrsctest" if self.is_testnet else "VRSC"
+            self.mcp_chain = "vrsctest"
+        if self.mcp_chain.lower() != "vrsctest":
+            raise ValueError("MCP chain must be vrsctest; Mainnet is disabled")
         self.mcp_servers = os.getenv("VERUS_MCP_SERVERS", self.mcp_servers)
         self.mcp_audit_dir = os.getenv("VERUSIDX_AUDIT_DIR", self.mcp_audit_dir)
         self.mcp_spending_limits_path = os.getenv(
@@ -872,15 +922,29 @@ class VerusConfig:
         self.mcp_extra_chains = os.getenv("VERUSIDX_EXTRA_CHAINS", self.mcp_extra_chains)
         self.mcp_bin_path = os.getenv("VERUSIDX_BIN_PATH", self.mcp_bin_path)
 
+        self.activation_profile_path = os.getenv(
+            "VERUS_ACTIVATION_PROFILE_PATH", self.activation_profile_path
+        )
+        self.mutation_approval_path = os.getenv(
+            "VERUS_MUTATION_APPROVAL_PATH", self.mutation_approval_path
+        )
+        self.mutation_outbox_path = os.getenv(
+            "VERUS_MUTATION_OUTBOX_PATH", self.mutation_outbox_path
+        )
+
         net = os.getenv("VERUS_NETWORK", "").lower()
-        if net in ("mainnet", "testnet"):
-            self.network = VerusNetwork(net)
+        if net and net != "testnet":
+            raise ValueError("VERUS_NETWORK must be testnet; Mainnet is disabled")
+        if net == "testnet":
+            self.network = VerusNetwork.TESTNET
             if "VERUS_API_URL" not in os.environ:
                 self.api_url = API_ENDPOINTS[self.network]
+        if str(self.api_url).rstrip("/").lower() == "https://api.verus.services":
+            raise ValueError("The Mainnet API endpoint is disabled; use a Testnet endpoint")
 
     @property
     def is_mainnet(self) -> bool:
-        return self.network == VerusNetwork.MAINNET
+        return False
 
     @property
     def is_testnet(self) -> bool:

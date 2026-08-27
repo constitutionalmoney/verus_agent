@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "grants": [
+    {
+      "approval_id": "expired-example-only",
+      "task_id": "synthetic-task-id",
+      "capability": "verus.currency.send",
+      "network": "testnet",
+      "idempotency_key": "synthetic-idempotency-key",
+      "rpc_methods": [
+        "sendcurrency"
+      ],
+      "issued_at": "2000-01-01T00:00:00Z",
+      "expires_at": "2000-01-01T00:05:00Z"
+    }
+  ]
+}

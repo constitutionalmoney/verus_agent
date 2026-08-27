@@ -1,5 +1,10 @@
 # VerusID as LLM/SLM Container, Security Layer & Monetization Engine for UAI Cluster Intelligence
 
+> **Archived proposal:** This is research/design material, not implemented
+> behavior, activation authority, current release guidance, or permission to
+> publish protected intellectual property. Current runtime rules are in
+> `AGENTS.md` and `docs/CROSS_PROJECT_ACTIVATION.md`.
+
 > **Extends:** #5 (Verus Blockchain Specialist Agent), #8 (Verus Mobile Wallet Integration & v1.2.14-2)  
 > **Priority:** High — Strategic Architecture  
 > **Type:** Research + Architecture + Feature  

@@ -72,6 +72,8 @@ class DeFiOperationResult:
     operation: str
     success: bool
     txid: Optional[str] = None
+    opid: Optional[str] = None
+    confirmed: bool = False
     error: Optional[str] = None
     data: Dict[str, Any] = field(default_factory=dict)
     timestamp: datetime = field(default_factory=datetime.now)
@@ -216,6 +218,8 @@ class VerusDeFiManager:
         via: str = "",
         destination: Optional[str] = None,
         vdxf_tag: Optional[Dict[str, str]] = None,
+        poll_interval: float = 5.0,
+        max_polls: int = 120,
     ) -> DeFiOperationResult:
         """
         Execute a currency conversion via Verus protocol DeFi.
@@ -225,10 +229,9 @@ class VerusDeFiManager:
 
         Note
         ----
-        ``sendcurrency`` returns an **opid** (operation ID), not a txid.
-        The opid is stored in ``DeFiOperationResult.txid`` for convenience
-        but callers should poll ``z_getoperationstatus`` to await the
-        actual on-chain transaction and retrieve the real txid.
+        ``sendcurrency`` returns an operation ID. This method polls
+        ``z_getoperationstatus`` and reports success only after terminal
+        success yields the actual transaction ID.
         """
         dest = destination or self.destination_address
         if not dest:
@@ -251,15 +254,12 @@ class VerusDeFiManager:
 
         try:
             opid = await self.cli.sendcurrency(dest, [output])
-            logger.info(
-                "Conversion: %.4f %s → %s (via %s) opid=%s",
-                amount, from_currency, to_currency, via or "direct", opid,
-            )
-            return DeFiOperationResult(
+            return await self._confirm_sendcurrency(
                 operation="convert",
-                success=True,
-                txid=opid if isinstance(opid, str) else str(opid),
-                data={"output": output, "is_opid": True},
+                opid=opid,
+                output=output,
+                poll_interval=poll_interval,
+                max_polls=max_polls,
             )
         except VerusError as exc:
             logger.error("Conversion failed: %s", exc)
@@ -274,19 +274,26 @@ class VerusDeFiManager:
         amount: float,
         from_address: Optional[str] = None,
         vdxf_tag: Optional[Dict[str, str]] = None,
+        poll_interval: float = 5.0,
+        max_polls: int = 120,
     ) -> DeFiOperationResult:
         """Send currency without conversion.
 
         Note
         ----
-        ``sendcurrency`` returns an **opid**, not a txid.  The opid is stored
-        in ``DeFiOperationResult.txid``.  Poll ``z_getoperationstatus`` to
-        track completion and obtain the actual txid.
+        ``sendcurrency`` returns an operation ID. This method polls for a
+        terminal status and returns success only with the resulting txid.
 
         Memos (``memo`` field in outputs) only work when sending to
         z-addresses (``zs...``).  Transparent addresses silently ignore memos.
         """
         sender = from_address or self.destination_address
+        if currency.upper() == "VRSC":
+            return DeFiOperationResult(
+                operation="send",
+                success=False,
+                error="VRSC Mainnet sends are disabled; use a VRSCTEST currency",
+            )
         output: Dict[str, Any] = {
             "currency": currency,
             "address": to_address,
@@ -297,17 +304,57 @@ class VerusDeFiManager:
 
         try:
             opid = await self.cli.sendcurrency(sender, [output])
-            return DeFiOperationResult(
+            return await self._confirm_sendcurrency(
                 operation="send",
-                success=True,
-                txid=opid if isinstance(opid, str) else str(opid),
-                data={"output": output, "is_opid": True},
+                opid=opid,
+                output=output,
+                poll_interval=poll_interval,
+                max_polls=max_polls,
             )
         except VerusError as exc:
             logger.error("Send failed: %s", exc)
             return DeFiOperationResult(
                 operation="send", success=False, error=str(exc),
             )
+
+    async def _confirm_sendcurrency(
+        self,
+        *,
+        operation: str,
+        opid: Any,
+        output: Dict[str, Any],
+        poll_interval: float,
+        max_polls: int,
+    ) -> DeFiOperationResult:
+        operation_id = opid if isinstance(opid, str) else str(opid)
+        status = await self.await_opid(
+            operation_id,
+            poll_interval=poll_interval,
+            max_polls=max_polls,
+        )
+        terminal = status.get("status")
+        result = status.get("result") if isinstance(status.get("result"), dict) else {}
+        txid = result.get("txid")
+        if terminal != "success" or not isinstance(txid, str) or not txid:
+            error_value = status.get("error")
+            if isinstance(error_value, dict):
+                error_value = error_value.get("message") or "operation failed"
+            return DeFiOperationResult(
+                operation=operation,
+                success=False,
+                opid=operation_id,
+                confirmed=False,
+                error=str(error_value or f"operation ended with status '{terminal}'"),
+                data={"output": output, "operation_status": terminal},
+            )
+        return DeFiOperationResult(
+            operation=operation,
+            success=True,
+            txid=txid,
+            opid=operation_id,
+            confirmed=True,
+            data={"output": output, "operation_status": terminal},
+        )
 
     # ------------------------------------------------------------------
     # Opid tracking helper
@@ -517,7 +564,8 @@ class VerusDeFiManager:
         """
         Monitor the memory pool for pending transactions.
 
-        Uses v1.2.14-2 enhanced ``getrawmempool`` with type filtering.
+        Uses ``getrawmempool`` type filtering introduced in the 1.2.14 release
+        line; the runtime floor is maintained separately in config.
         """
         return await self.cli.getrawmempool(verbose=True, filter_type=filter_type)
 

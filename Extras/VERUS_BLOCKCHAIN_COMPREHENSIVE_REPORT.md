@@ -1,5 +1,10 @@
 # Verus Blockchain — Comprehensive Development Report
 
+> **Archived source snapshot:** This report preserves research from the
+> `v1.2.14-2` release line and must not be used as current runtime guidance.
+> The agent's verified floor is `v1.2.17-6` as of 2026-08-26; verify the
+> current official release before live work. Source facts here may be historical.
+
 > **Date**: January 2026 (Revised March 2026)
 > **Prepared for**: UAI-e-Gold Project — Agent Swarm Integration
 > **Version**: Verus Protocol v1.2.14-2 (Latest CRITICAL/MANDATORY Upgrade)

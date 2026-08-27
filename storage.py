@@ -427,10 +427,12 @@ class VerusStorageManager:
         vdxf_key: str = VDXF_STORAGE_CHUNK,
     ) -> StorageResult:
         """
-        Store a file using Method 2: ``sendcurrency`` to a z-address.
+        Reserved Method 2 surface for ``sendcurrency`` to a z-address.
 
-        Uses Sapling encryption — only the z-address holder can decrypt.
-        Async operation via opid.
+        This path is blocked because the previous implementation wrote only an
+        identity metadata reference and did not send the file. No transaction
+        is submitted until a reviewed chunking, size, memo, confirmation, and
+        retrieval contract is implemented.
 
         Parameters
         ----------
@@ -446,7 +448,7 @@ class VerusStorageManager:
         Returns
         -------
         StorageResult
-            Result with opid for async tracking.
+            A fail-closed result; this method is not currently implemented.
 
         Notes
         -----
@@ -459,75 +461,17 @@ class VerusStorageManager:
           when the destination is a z-address (``zs...``).  Transparent
           addresses (``R...``) silently ignore memo data.
         """
-        try:
-            with open(file_path, "rb") as f:
-                file_data = f.read()
-
-            file_hash = hashlib.sha256(file_data).hexdigest()
-            filename = file_path.split("/")[-1].split("\\")[-1]
-
-            # Use z_sendmany for shielded sending
-            # The file data would be encoded in the memo field for small data
-            # or via the data wrapper mechanism for larger data
-            logger.info(
-                "Sendcurrency storage requested for '%s' (%d bytes) to %s",
-                filename, len(file_data), z_address[:20],
-            )
-
-            # Store metadata reference on the identity
-            meta = {
-                "type": "file",
-                "filename": filename,
-                "size": len(file_data),
-                "hash": file_hash,
-                "method": StorageMethod.SENDCURRENCY,
-                "z_address": z_address,
-                "timestamp": datetime.now().isoformat(),
-            }
-
-            content_multimap = {
-                VDXF_STORAGE_META: [{"": json.dumps(meta)}],
-                VDXF_STORAGE_HASH: [{"": file_hash}],
-            }
-
-            result = await self.cli.updateidentity({
-                "name": identity_name,
-                "contentmultimap": content_multimap,
-            })
-            txid = result if isinstance(result, str) else result.get("txid")
-
-            stored = StoredFile(
-                file_id=file_hash,
-                filename=filename,
-                mime_type="application/octet-stream",
-                size_bytes=len(file_data),
-                storage_method=StorageMethod.SENDCURRENCY,
-                identity_name=identity_name,
-                txid=txid,
-                z_address=z_address,
-                encrypted=True,
-            )
-            self._file_index[file_hash] = stored
-
-            return StorageResult(
-                operation="store_file_sendcurrency",
-                success=True,
-                file_id=file_hash,
-                txid=txid,
-                data={
-                    "filename": filename,
-                    "method": StorageMethod.SENDCURRENCY,
-                    "size": len(file_data),
-                    "z_address": z_address,
-                    "encrypted": True,
-                },
-            )
-
-        except (VerusError, IOError) as exc:
-            logger.error("Sendcurrency storage failed: %s", exc)
-            return StorageResult(
-                operation="store_file_sendcurrency", success=False, error=str(exc),
-            )
+        # The earlier implementation only wrote metadata with updateidentity;
+        # it never sent the file to the z-address. Fail closed instead of
+        # reporting a storage operation which did not happen.
+        return StorageResult(
+            operation="store_file_sendcurrency",
+            success=False,
+            error=(
+                "Shielded file storage is not implemented safely; no "
+                "sendcurrency or updateidentity transaction was submitted"
+            ),
+        )
 
     # ------------------------------------------------------------------
     # Method 3: Raw contentmultimap (small data <5KB)
@@ -881,6 +825,8 @@ class VerusStorageManager:
         z_address: str,
         data_hex: str,
         amount: float = 0.0001,
+        poll_interval: float = 5.0,
+        max_polls: int = 120,
     ) -> StorageResult:
         """
         Send a data payload to a z-address via ``sendcurrency``.
@@ -906,8 +852,7 @@ class VerusStorageManager:
         Returns
         -------
         StorageResult
-            Result with opid for async status tracking via
-            ``z_getoperationstatus``.
+            Result with txid only after terminal operation confirmation.
         """
         try:
             outputs = [{
@@ -920,14 +865,28 @@ class VerusStorageManager:
             )
             r = result.result if hasattr(result, "result") else result
             opid = r if isinstance(r, str) else r.get("opid", str(r))
+            status = await self.cli.await_operation(
+                str(opid), poll_interval=poll_interval, max_polls=max_polls
+            )
+            terminal_result = status.get("result") if isinstance(status.get("result"), dict) else {}
+            txid = terminal_result.get("txid")
+            if status.get("status") != "success" or not txid:
+                return StorageResult(
+                    operation="sendcurrency_data",
+                    success=False,
+                    error=f"sendcurrency operation ended with status '{status.get('status')}'",
+                    data={"opid": str(opid)},
+                )
 
             data_hash = hashlib.sha256(bytes.fromhex(data_hex)).hexdigest()
 
             return StorageResult(
                 operation="sendcurrency_data",
                 success=True,
+                txid=txid,
                 data={
-                    "opid": opid,
+                    "opid": str(opid),
+                    "confirmed": True,
                     "z_address": z_address,
                     "data_hash": data_hash,
                     "size_bytes": len(data_hex) // 2,

@@ -50,8 +50,8 @@ def config():
 def mock_cli(config):
     cli = VerusCLI(config)
     cli._backend = "api"
-    cli._daemon_version_str = "1.2.14-2"
-    cli._daemon_version = 1021400
+    cli._daemon_version_str = "1.2.17-6"
+    cli._daemon_version = 1021700
     return cli
 
 
@@ -633,7 +633,7 @@ class TestMarketplaceInvoiceDiscovery:
         result = await mp.create_invoice(
             product_identity="UAITranslator@",
             amount=5.0,
-            currency="VRSC",
+            currency="VRSCTEST",
             buyer_identity="Alice@",
         )
         assert result.success is True
@@ -641,15 +641,16 @@ class TestMarketplaceInvoiceDiscovery:
         assert result.data["invoice_id"] == "inv_123"
 
     @pytest.mark.asyncio
-    async def test_create_invoice_fallback(self, mock_cli, mock_id_mgr):
-        """When createinvoice RPC fails, fallback to on-chain memo."""
+    async def test_create_invoice_does_not_fallback_to_write(self, mock_cli, mock_id_mgr):
+        """A failed invoice RPC must not trigger an undocumented write."""
         mock_cli.veruspay_createinvoice = AsyncMock(
             side_effect=Exception("RPC unavailable")
         )
         mp = VerusAgentMarketplace(mock_cli, mock_id_mgr, enabled=True)
         result = await mp.create_invoice("Product@", 2.5)
-        assert result.success is True
-        assert result.data.get("fallback") is True
+        assert result.success is False
+        assert "fallback is prohibited" in result.error
+        mock_id_mgr.update_identity.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_discover_products_empty(self, mock_cli, mock_id_mgr):
@@ -1064,7 +1065,7 @@ class TestMobileWallet:
         pay = helper.generate_payment_uri(
             destination="Recipient@",
             amount=10.5,
-            currency="VRSC",
+            currency="VRSCTEST",
         )
         assert pay.uri.startswith("vrsc:Recipient%40")
         assert "amount=10.50000000" in pay.uri
@@ -1079,6 +1080,10 @@ class TestMobileWallet:
         )
         assert "currency=tBTC.vETH" in pay.uri
         assert "label=Payment" in pay.uri
+
+    def test_payment_uri_rejects_mainnet_currency(self, helper):
+        with pytest.raises(ValueError, match="Mainnet payment requests are disabled"):
+            helper.generate_payment_uri(destination="Recipient@", amount=1, currency="VRSC")
 
     def test_payment_uri_defaults_to_agent(self, helper):
         pay = helper.generate_payment_uri(amount=1.0)
@@ -1169,6 +1174,45 @@ class TestMobileWallet:
 
     def test_mobile_capability_snapshot(self, helper):
         caps = helper.get_mobile_capabilities()
-        assert caps["release"]["ios_testflight"] == "1.0.1-1"
+        assert caps["release"]["android_apk"] == "v1.1.0-14"
         assert caps["deeplinks"]["preferred_format"] == "verus://1/<compact_payload>"
         assert caps["generic_request_details"]["identity_update_request"] == "supported_experimental"
+
+    def test_user_data_request_requires_https_by_default(self, helper):
+        result = helper.generate_user_data_request_link(
+            compact_payload="userdata",
+            response_endpoint="http://example.test/callback",
+        )
+        assert result.success is False
+        assert "HTTPS" in result.error
+
+    def test_data_packet_request_supports_https(self, helper):
+        result = helper.generate_data_packet_request_link(
+            compact_payload="packet",
+            response_endpoint="https://example.test/callback",
+        )
+        assert result.success is True
+        assert result.data["multi_detail_response"] is True
+
+    def test_http_requires_nonproduction_environment_gate(self, monkeypatch):
+        from verus_agent.mobile import VerusMobileHelper
+
+        monkeypatch.setenv("VERUS_RUNTIME_ENVIRONMENT", "test")
+        monkeypatch.setenv("VERUS_MOBILE_ALLOW_INSECURE_HTTP", "true")
+        helper = VerusMobileHelper()
+        result = helper.generate_user_data_request_link(
+            compact_payload="userdata",
+            response_endpoint="http://example.test/callback",
+            allow_insecure_http=True,
+        )
+        assert result.success is True
+        assert result.data["insecure_http_explicitly_enabled"] is True
+
+        monkeypatch.setenv("VERUS_RUNTIME_ENVIRONMENT", "production")
+        production_helper = VerusMobileHelper()
+        blocked = production_helper.generate_user_data_request_link(
+            compact_payload="userdata",
+            response_endpoint="http://example.test/callback",
+            allow_insecure_http=True,
+        )
+        assert blocked.success is False

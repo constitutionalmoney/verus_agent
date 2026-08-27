@@ -230,6 +230,11 @@ class TestVerusProvenanceManager:
     def mock_cli(self):
         cli = MagicMock()
         cli.call = AsyncMock()
+        cli.await_operation = AsyncMock(return_value={
+            "id": "opid-123",
+            "status": "success",
+            "result": {"txid": "delivery-txid"},
+        })
         cli.updateidentity = AsyncMock(return_value="tx_abc")
         cli.getidentity = AsyncMock(return_value={
             "identity": {
@@ -352,6 +357,8 @@ class TestVerusProvenanceManager:
         )
         assert result["success"] is True
         assert result["data"]["opid"] == "opid-123"
+        assert result["txid"] == "delivery-txid"
+        assert result["data"]["confirmed"] is True
         assert result["data"]["size_bytes"] == 16
 
     @pytest.mark.asyncio

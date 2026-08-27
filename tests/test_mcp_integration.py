@@ -332,8 +332,8 @@ class TestMCPConfig:
         config = VerusConfig(network=VerusNetwork.TESTNET)
         assert config.mcp_chain == "vrsctest"
 
-        config2 = VerusConfig(network=VerusNetwork.MAINNET)
-        assert config2.mcp_chain == "VRSC"
+        with pytest.raises(ValueError, match="Mainnet is disabled"):
+            VerusConfig(network="mainnet")  # type: ignore[arg-type]
 
     @patch.dict("os.environ", {"VERUS_MCP_ENABLED": "true", "VERUS_MCP_CHAIN": "vrsctest"})
     def test_mcp_env_override(self):

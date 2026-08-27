@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools==84.0.0", "wheel==0.48.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "verus-agent"
+version = "0.5.0"
+description = "Testnet-first Verus specialist agent with fail-closed activation controls"
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+  "aiohttp==3.14.3",
+  "numpy==2.4.3",
+]
+
+[project.optional-dependencies]
+test = [
+  "cryptography==50.0.1",
+  "pytest==9.1.1",
+  "pytest-asyncio==1.4.0",
+  "pytest-timeout==2.4.0",
+]
+watermark = [
+  "safetensors>=0.5,<1",
+  "torch>=2.6,<3",
+]
+
+[project.scripts]
+verus-agent = "verus_agent.run_verus_agent_task:main"
+
+[tool.setuptools]
+packages = ["verus_agent"]
+package-dir = { verus_agent = "." }
+
+[tool.setuptools.package-data]
+verus_agent = ["*.json", "*.md"]

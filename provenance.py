@@ -325,6 +325,8 @@ class VerusProvenanceManager:
         z_address: str,
         file_path: Optional[str] = None,
         data: Optional[bytes] = None,
+        poll_interval: float = 5.0,
+        max_polls: int = 120,
     ) -> Dict[str, Any]:
         """
         Encrypt a file and deliver it via ``sendcurrency`` to a z-address.
@@ -333,7 +335,7 @@ class VerusProvenanceManager:
         Sapling encryption is built-in — only the z-address holder (or
         anyone with the EVK) can decrypt it.
 
-        Returns the opid for async tracking via ``z_getoperationstatus``.
+        Returns success only after operation-status polling yields a txid.
         """
         try:
             if file_path:
@@ -365,12 +367,26 @@ class VerusProvenanceManager:
 
             # sendcurrency returns an opid for async operations
             opid = r if isinstance(r, str) else r.get("opid", r)
+            status = await self.cli.await_operation(
+                str(opid), poll_interval=poll_interval, max_polls=max_polls
+            )
+            terminal_result = status.get("result") if isinstance(status.get("result"), dict) else {}
+            txid = terminal_result.get("txid")
+            if status.get("status") != "success" or not txid:
+                return ProvenanceResult(
+                    operation="encrypted_file_delivery",
+                    success=False,
+                    error=f"sendcurrency operation ended with status '{status.get('status')}'",
+                    data={"opid": str(opid)},
+                ).to_dict()
 
             return ProvenanceResult(
                 operation="encrypted_file_delivery",
                 success=True,
+                txid=txid,
                 data={
-                    "opid": opid,
+                    "opid": str(opid),
+                    "confirmed": True,
                     "z_address": z_address,
                     "file_hash": file_hash,
                     "size_bytes": len(file_data),

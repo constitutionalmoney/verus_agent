@@ -1,27 +1,11 @@
 {
-  "description": "Default allowlist for automation-safe verus_agent task execution.",
+  "description": "Default read-only allowlist. Membership is not human approval.",
   "allowed_capabilities": [
     "verus.cli.execute",
     "verus.identity.get",
-    "verus.identity.create",
-    "verus.identity.update",
-    "verus.identity.vault",
     "verus.currency.estimate",
-    "verus.currency.convert",
-    "verus.currency.send",
-    "verus.storage.store",
     "verus.storage.retrieve",
-    "verus.storage.store_data_wrapper",
     "verus.storage.retrieve_data_wrapper",
-    "verus.provenance.create_nft",
-    "verus.provenance.store_descriptors",
-    "verus.provenance.sign_mmr",
-    "verus.mobile.payment_uri",
-    "verus.mobile.login_consent",
-    "verus.mobile.purchase_link",
-    "verus.mobile.generic_request_link",
-    "verus.mobile.identity_update_request_link",
-    "verus.mobile.app_encryption_request_link",
     "verus.mobile.capabilities",
     "verus.login.authenticate",
     "verus.login.validate",
@@ -33,7 +17,7 @@
     "getcurrencystate",
     "getidentity",
     "getidentitycontent",
-    "updateidentity",
-    "estimateconversion"
+    "estimateconversion",
+    "z_getoperationstatus"
   ]
 }

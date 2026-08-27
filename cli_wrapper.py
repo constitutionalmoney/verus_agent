@@ -27,6 +27,7 @@ from verus_agent.config import (
     MIN_DAEMON_VERSION_STR,
     VerusConfig,
 )
+from verus_agent.runtime_policy import require_rpc_authorization
 
 logger = logging.getLogger("verus_agent.cli")
 
@@ -60,6 +61,14 @@ class VerusAPIError(VerusError):
 
 class VerusVersionError(VerusError):
     """Daemon version does not meet the minimum requirement."""
+
+
+class VerusNetworkError(VerusError):
+    """The connected daemon is not positively identified as Testnet."""
+
+
+class VerusReadinessError(VerusError):
+    """The connected Testnet daemon is not ready for a mutation."""
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +143,11 @@ class VerusCLI:
                 timeout=aiohttp.ClientTimeout(total=self.config.api_timeout),
                 auth=auth,
             )
-        await self._verify_daemon_version()
+        try:
+            await self._verify_daemon_version()
+        except Exception:
+            await self.close()
+            raise
 
     async def close(self) -> None:
         """Clean up resources."""
@@ -162,6 +175,7 @@ class VerusCLI:
         CLIResult
             Structured result with parsed JSON.
         """
+        require_rpc_authorization(method)
         params = params or []
         start = time.monotonic()
 
@@ -224,9 +238,39 @@ class VerusCLI:
         r = await self.call("registeridentity", [json.dumps(identity_json)])
         return r.result
 
-    async def updateidentity(self, identity_json: Dict[str, Any]) -> Dict[str, Any]:
-        r = await self.call("updateidentity", [json.dumps(identity_json)])
-        return r.result
+    async def prepare_updateidentity(
+        self, identity_json: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Build the full current-state identity snapshot for submission."""
+
+        submitted = dict(identity_json)
+        if "contentmultimap" in submitted:
+            identity_name = submitted.get("name") or submitted.get("identityaddress")
+            if not identity_name:
+                raise VerusError(
+                    "updateidentity with contentmultimap requires name or identityaddress"
+                )
+            current_rpc = await self.getidentity(str(identity_name))
+            current_identity = current_rpc.get("identity", current_rpc)
+            current_map = current_identity.get("contentmultimap", {})
+            submitted_map = submitted["contentmultimap"]
+            if not isinstance(current_map, dict) or not isinstance(submitted_map, dict):
+                raise VerusError("contentmultimap must be an object")
+            submitted["contentmultimap"] = {**current_map, **submitted_map}
+        return submitted
+
+    async def updateidentity_with_snapshot(
+        self, identity_json: Dict[str, Any]
+    ) -> tuple[Any, Dict[str, Any]]:
+        """Submit an update and return both the daemon result and exact payload."""
+
+        submitted = await self.prepare_updateidentity(identity_json)
+        r = await self.call("updateidentity", [json.dumps(submitted)])
+        return r.result, submitted
+
+    async def updateidentity(self, identity_json: Dict[str, Any]) -> Any:
+        result, _submitted = await self.updateidentity_with_snapshot(identity_json)
+        return result
 
     async def getcurrencystate(self, currency_name: str) -> Any:
         r = await self.call("getcurrencystate", [currency_name])
@@ -317,6 +361,25 @@ class VerusCLI:
         params = [json.dumps(opids)] if opids else []
         r = await self.call("z_getoperationstatus", params)
         return r.result
+
+    async def await_operation(
+        self,
+        opid: str,
+        *,
+        poll_interval: float = 5.0,
+        max_polls: int = 120,
+    ) -> Dict[str, Any]:
+        """Poll an async wallet operation to terminal status."""
+
+        for poll_number in range(max_polls):
+            statuses = await self.z_getoperationstatus([opid])
+            if statuses:
+                status = statuses[0]
+                if status.get("status") in {"success", "failed", "cancelled"}:
+                    return status
+            if poll_number + 1 < max_polls:
+                await asyncio.sleep(poll_interval)
+        return {"id": opid, "status": "timeout"}
 
     async def z_getnewaddress(self, address_type: str = "sapling") -> str:
         """Generate a new shielded (z) address."""
@@ -443,8 +506,10 @@ class VerusCLI:
             else:
                 cmd_parts.append(str(p))
 
-        cmd_str = " ".join(cmd_parts)
-        logger.debug("CLI exec: %s", cmd_str)
+        # Never log serialized RPC parameters. They may contain credentials,
+        # wallet material, participant data, memos, or unpublished content.
+        command_label = f"{os.path.basename(cli) if cli else 'verus'} {method}"
+        logger.debug("CLI exec: method=%s param_count=%d", method, len(params))
 
         proc = await asyncio.create_subprocess_exec(
             *cmd_parts,
@@ -456,7 +521,7 @@ class VerusCLI:
         raw = stdout.decode().strip()
 
         if proc.returncode != 0:
-            raise VerusCLIError(cmd_str, stderr.decode().strip(), proc.returncode or -1)
+            raise VerusCLIError(command_label, "RPC command failed", proc.returncode or -1)
 
         try:
             parsed = json.loads(raw) if raw else None
@@ -488,103 +553,129 @@ class VerusCLI:
             "params": params,
         }
 
-        logger.debug("API call: %s %s", method, params)
+        # Parameters are intentionally omitted because RPC payloads can contain
+        # secrets, wallet data, private records, or unpublished content.
+        logger.debug("API call: method=%s param_count=%d", method, len(params))
 
         async with self._session.post(self.config.api_url, json=payload) as resp:
             raw_text = await resp.text()
             if resp.status != 200:
-                raise VerusAPIError(method, f"HTTP {resp.status}: {raw_text}")
+                raise VerusAPIError(method, f"HTTP {resp.status}")
 
             data = json.loads(raw_text)
             if "error" in data and data["error"] is not None:
                 err = data["error"]
                 raise VerusAPIError(
                     method,
-                    err.get("message", str(err)),
+                    "RPC endpoint returned an error",
                     err.get("code", -1),
                 )
 
             return {"parsed": data.get("result"), "raw": raw_text}
 
+    @staticmethod
+    def _parse_version_str(value: str) -> tuple[int, int]:
+        """Parse ``major.minor.patch[-revision]`` into comparable numbers."""
+
+        import re
+
+        match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:-(\d+))?", value.strip())
+        if not match:
+            raise VerusVersionError("Daemon returned an unrecognized version string")
+        major, minor, patch, revision = match.groups()
+        encoded = int(major) * 1_000_000 + int(minor) * 10_000 + int(patch) * 100
+        return encoded, int(revision or 0)
+
+    def _validate_daemon_contract(self, info: Dict[str, Any]) -> None:
+        """Validate the exact network and current source-coded version floor."""
+
+        if info.get("testnet") is not True:
+            raise VerusNetworkError(
+                "Daemon did not positively identify itself as Testnet; refusing access"
+            )
+
+        # Current Verus getinfo returns both numeric ``version`` and the
+        # revision-bearing ``VRSCversion``. Prefer VRSCversion so the release
+        # suffix is not silently discarded.
+        version = info.get("VRSCversion") or info.get("version")
+        if isinstance(version, int) and not isinstance(version, bool):
+            self._daemon_version = version
+            major = version // 1_000_000
+            minor = (version % 1_000_000) // 10_000
+            patch = (version % 10_000) // 100
+            self._daemon_version_str = f"{major}.{minor}.{patch}"
+            self._daemon_revision = 0
+        elif isinstance(version, str):
+            encoded, revision = self._parse_version_str(version)
+            self._daemon_version = encoded
+            self._daemon_version_str = version
+            self._daemon_revision = revision
+        else:
+            raise VerusVersionError(
+                "Could not determine daemon version from getinfo; refusing to initialize"
+            )
+
+        _, minimum_revision = self._parse_version_str(MIN_DAEMON_VERSION_STR)
+        if self._daemon_version < MIN_DAEMON_VERSION or (
+            self._daemon_version == MIN_DAEMON_VERSION
+            and self._daemon_revision < minimum_revision
+        ):
+            raise VerusVersionError(
+                f"Daemon version {self._daemon_version_str} < minimum "
+                f"{MIN_DAEMON_VERSION_STR}. Please upgrade."
+            )
+
     async def _verify_daemon_version(self) -> None:
-        """Enforce minimum daemon version (supports `major.minor.patch` and
-        optional `-<revision>` suffixs, e.g. `1.2.14-2`).
-
-        Numeric encoding (used historically) still applies for major/minor/patch
-        (encoded as `major*1_000_000 + minor*10_000 + patch*100`). A revision
-        suffix (e.g. `-2`) is compared separately so `1.2.14-2` > `1.2.14`.
-        """
-        def _parse_version_str(s: str) -> tuple[int, int]:
-            """Parse a version string and return (encoded_int, revision).
-
-            Examples:
-              - "1.2.14"     -> (1021400, 0)
-              - "1.2.14-2"   -> (1021400, 2)
-            """
-            import re
-
-            # Match: major.minor.patch[-revision]
-            m = re.match(r"^(\d+)\.(\d+)\.(\d+)(?:-?(\d+))?", s)
-            if not m:
-                # Fallback: extract leading numbers where possible
-                parts = s.split(".")
-                major = int(parts[0]) if parts and parts[0].isdigit() else 0
-                minor = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
-                patch_part = parts[2] if len(parts) > 2 else "0"
-                patch_match = re.match(r"(\d+)", patch_part)
-                patch = int(patch_match.group(1)) if patch_match else 0
-                rev_match = re.search(r"-(\d+)", s)
-                rev = int(rev_match.group(1)) if rev_match else 0
-                return (major * 1000000 + minor * 10000 + patch * 100, rev)
-
-            major_s, minor_s, patch_s, rev_s = m.groups()
-            major_i = int(major_s)
-            minor_i = int(minor_s)
-            patch_i = int(patch_s)
-            rev_i = int(rev_s) if rev_s else 0
-            return (major_i * 1000000 + minor_i * 10000 + patch_i * 100, rev_i)
+        """Fail closed unless getinfo proves Testnet and the daemon floor."""
 
         try:
             info = await self.getinfo()
-            version = info.get("version") or info.get("VRSCversion")
-
-            # Default revision==0 for integer versions (no suffix possible).
-            if isinstance(version, int):
-                self._daemon_version = version
-                major = version // 1000000
-                minor = (version % 1000000) // 10000
-                patch = (version % 10000) // 100
-                self._daemon_version_str = f"{major}.{minor}.{patch}"
-                self._daemon_revision = 0
-
-            elif isinstance(version, str):
-                # Accept strings like "1.2.14" or "1.2.14-2"
-                self._daemon_version_str = version
-                encoded, rev = _parse_version_str(version)
-                self._daemon_version = encoded
-                self._daemon_revision = rev
-            else:
-                logger.warning("Could not determine daemon version from getinfo")
-                return
-
-            # Determine minimum required revision (if any) from the configured
-            # string (e.g. MIN_DAEMON_VERSION_STR == "1.2.14-2").
-            _, min_required_rev = _parse_version_str(MIN_DAEMON_VERSION_STR)
-
-            # Numeric (major/minor/patch) check first.
-            if self._daemon_version < MIN_DAEMON_VERSION:
-                raise VerusVersionError(
-                    f"Daemon version {self._daemon_version_str} < minimum "
-                    f"{MIN_DAEMON_VERSION_STR}. Please upgrade."
-                )
-
-            # If numeric versions are equal, compare revision suffix (if required).
-            if self._daemon_version == MIN_DAEMON_VERSION and getattr(self, "_daemon_revision", 0) < min_required_rev:
-                raise VerusVersionError(
-                    f"Daemon version {self._daemon_version_str} < minimum "
-                    f"{MIN_DAEMON_VERSION_STR}. Please upgrade."
-                )
-
-            logger.info("Verus daemon version: %s ✓", self._daemon_version_str)
+            if not isinstance(info, dict):
+                raise VerusVersionError("getinfo did not return an object")
+            self._validate_daemon_contract(info)
+            logger.info(
+                "Verified Testnet daemon version: %s", self._daemon_version_str
+            )
         except (VerusAPIError, VerusCLIError) as exc:
-            logger.warning("Could not verify daemon version: %s", exc)
+            raise VerusVersionError(
+                "Could not verify daemon version; refusing to initialize"
+            ) from exc
+
+    async def verify_mutation_readiness(self) -> Dict[str, Any]:
+        """Re-check Testnet, version, peer connectivity, and sync before a write."""
+
+        try:
+            info = await self.getinfo()
+        except (VerusAPIError, VerusCLIError) as exc:
+            raise VerusReadinessError(
+                "Could not reach the daemon for the pre-mutation readiness check"
+            ) from exc
+        if not isinstance(info, dict):
+            raise VerusReadinessError("getinfo did not return an object")
+        self._validate_daemon_contract(info)
+
+        values: Dict[str, int] = {}
+        for field_name in ("blocks", "longestchain", "connections"):
+            value = info.get(field_name)
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise VerusReadinessError(
+                    f"Daemon readiness is missing integer field '{field_name}'"
+                )
+            values[field_name] = value
+
+        if values["connections"] <= 0:
+            raise VerusReadinessError("Daemon has no verified peer connectivity")
+        if (
+            values["blocks"] <= 0
+            or values["longestchain"] <= 0
+            or values["blocks"] < values["longestchain"]
+        ):
+            raise VerusReadinessError("Daemon is not synchronized to its longest chain")
+
+        return {
+            "network": "testnet",
+            "version": self._daemon_version_str,
+            "blocks": values["blocks"],
+            "longestchain": values["longestchain"],
+            "connections": values["connections"],
+        }
