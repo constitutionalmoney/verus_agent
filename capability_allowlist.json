@@ -1,6 +1,7 @@
 {
   "description": "Default read-only allowlist. Membership is not human approval.",
   "allowed_capabilities": [
+    "verus.knowledge.get",
     "verus.cli.execute",
     "verus.identity.get",
     "verus.currency.estimate",

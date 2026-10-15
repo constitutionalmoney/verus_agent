@@ -6,6 +6,7 @@
     "intended_use": "Read-only identity, ledger, and estimate verification before any separately reviewed activation."
   },
   "allowed_capabilities": [
+    "verus.knowledge.get",
     "verus.cli.execute",
     "verus.identity.get",
     "verus.currency.estimate",

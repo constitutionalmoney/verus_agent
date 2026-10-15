@@ -33,4 +33,7 @@ packages = ["verus_agent"]
 package-dir = { verus_agent = "." }
 
 [tool.setuptools.package-data]
-verus_agent = ["*.json", "*.md"]
+verus_agent = ["*.json", "*.md", "knowledge/*.md"]
+
+[tool.setuptools.exclude-package-data]
+verus_agent = ["LOCAL_OPERATOR.md", "*.local.json", "*.approval.json"]

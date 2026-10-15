@@ -163,19 +163,27 @@ VERUSPAY_DEEP_LINK_SCHEME = "i5jtwbp6zymeay9llnraglgjqgdrffsau4"
 WALLET_ENVIRONMENTS = ["extension", "mobile", "desktop"]
 
 # ---------------------------------------------------------------------------
-# Verus Mobile Wallet Capability Snapshot. Entries under ``release`` and the
-# v1.1.0-14 feature groups come from that official Android release. Legacy
-# shielded/AppEncryption notes are retained as unverified historical guidance.
+# Verus Mobile store release v1.1.0-21, checked 2026-10-15. Available GitHub
+# source remains v1.1.0-20; do not equate that tree with the store binary.
 # ---------------------------------------------------------------------------
 # Used by the agent to guide app developers on when mobile can replace
 # desktop workflows.
 VERUS_MOBILE_WALLET_CAPABILITIES = {
     "release": {
-        "android_apk": "v1.1.0-14",
-        "published_at": "2026-08-25",
-        "tag_commit": "3614a720aba25525f3907bdfefd8f1e271f06a62",
-        "source": "https://github.com/VerusCoin/Verus-Mobile/releases/tag/v1.1.0-14",
-        "ios_status": "not stated by this Android release",
+        "current": "v1.1.0-21",
+        "verified_at": "2026-10-15",
+        "store_release_date": "2026-10-12",
+        "android_store_version": "1.1.0-21",
+        "android_store_source": "https://play.google.com/store/apps/details?hl=en&id=org.autonomoussoftwarefoundation.verusmobile.android",
+        "ios_marketing_version": "1.1.0",
+        "ios_source": "https://apps.apple.com/us/app/verus-mobile/id6447361908",
+        "announcement_source": "https://t.me/TruthAndPrivacyForAll/422",
+        "ios_status": "announcement identifies build -21; public Apple metadata exposes 1.1.0 only",
+        "android_apk": "v1.1.0-20",
+        "published_at": "2026-10-07",
+        "tag_commit": "e659a1c6aa17ebe633e3c66c79091594dda1454b",
+        "source": "https://github.com/VerusCoin/Verus-Mobile/releases/tag/v1.1.0-20",
+        "source_binary_equivalence": "not established for store build -21",
     },
     "shielded_support": {
         "source_status": "legacy guidance; not reverified by v1.1.0-14 release notes",
@@ -202,14 +210,19 @@ VERUS_MOBILE_WALLET_CAPABILITIES = {
             "IdentityUpdateRequest",
             "DataPacketRequest",
             "UserDataRequest",
+            "AppEncryptionRequest",
         ],
-        "legacy_unverified_for_current_release": ["AppEncryptionRequest"],
+        "legacy_unverified_for_current_release": [],
+        "local_task_activation_blocked_for": ["AppEncryptionRequest"],
+        "encoding": "Base64URL of GenericRequest.toBuffer(); use toWalletDeeplinkUri()",
+        "mobile_url_length_must_be_less_than": 2046,
+        "experimental_setting": "Wallet Settings -> General Settings -> Enable experimental deeplinks",
     },
     "generic_request_details": {
         "veruspay_v4_invoice": "supported_with_burn_invoices",
         "authentication_request": "supported",
         "identity_update_request": "supported_experimental",
-        "app_encryption_request": "legacy_helper_unverified_by_v1.1.0-14_release",
+        "app_encryption_request": "upstream_source_experimental; local_task_activation_blocked",
         "data_packet_request": "supported_experimental",
         "user_data_request": "supported_experimental",
     },
@@ -223,6 +236,9 @@ VERUS_MOBILE_WALLET_CAPABILITIES = {
             "share by QR code, link, or NFC",
             "use one-time keys",
         ],
+        "onboarding": "24-word-less onboarding avoids manual transcription; seeds and backup risks remain",
+        "bearer_material": "Gift-card links and QR payloads carry spending material; never log or publish them",
+        "local_execution": "not implemented; no funding, claim, signing or NFC write authorized",
     },
     "generic_responses": {
         "encrypted_responses": True,
@@ -230,7 +246,19 @@ VERUS_MOBILE_WALLET_CAPABILITIES = {
         "secure_response_delivery": True,
         "https_response_endpoints_default": True,
         "http_requires_explicit_environment_option": True,
+        "mobile_http_option": "ALLOW_HTTP_GENERIC_RESPONSE_POSTS (default false; POST guard)",
+        "post_content_type": "application/octet-stream",
+        "post_body": "GenericResponse.toBuffer()",
+        "application_checks": ["expected signer and network", "requestID and request hash", "expiry and replay", "every returned detail", "independent on-chain completion"],
     },
+    "implementation_subset": {
+        "user_data": "signed CREDENTIAL/FULL_DATA request; response encryption required; hash-buffer search keys",
+        "data_packet": "signed FLAG_FOR_USERS_SIGNATURE request; strings/DataDescriptor objects; transmittal-to-user rejected",
+        "invoice": "V4 detail in GenericRequest; matching Testnet flag; tagged/Sapling destinations rejected by pinned mobile source",
+        "identity_update": "current identity UTXO distinct from aggregated history; wallet review and confirmation required",
+    },
+    "store_updates": ["navigation and animation performance", "identity state change and legacy login display fixes", "Android 16 KB page-size support"],
+    "knowledge": {"capability": "verus.knowledge.get", "topic": "mobile", "path": "knowledge/MOBILE_V1.1.0-21.md"},
     "validation_expansion": [
         "RPC",
         "currency",
@@ -306,6 +334,7 @@ AGENT_CATEGORY = "neural_swarm_intelligence"
 # Exposed capabilities (matches the spec in verus-blockchain-agent.md)
 # ---------------------------------------------------------------------------
 AGENT_CAPABILITIES = [
+    "verus.knowledge.get",
     "verus.identity.get",
     "verus.identity.create",
     "verus.identity.update",
@@ -639,6 +668,9 @@ REFERENCE_LIBRARIES = {
     "verusid_ts_client": {
         "package": "verusid-ts-client",
         "github": "https://github.com/VerusCoin/verusid-ts-client",
+        "verified_commit": "933e8f8da1a51b99ba7533701dddb9914b7a06b7",
+        "verified_at": "2026-10-15",
+        "knowledge_topic": "sdk",
         "purpose": "VerusID authentication SDK — signing, verification, login, identity updates",
         "key_class": "VerusIdInterface",
         "constructor": "new VerusIdInterface(chainId, baseURL, axiosConfig?)",
@@ -685,6 +717,11 @@ REFERENCE_LIBRARIES = {
     "verus_typescript_primitives": {
         "package": "verus-typescript-primitives",
         "github": "https://github.com/VerusCoin/verus-typescript-primitives",
+        "verified_commit": "3ffa9d77a3dd98c23fe4f66cf4368946906de780",
+        "compatibility_update": "https://github.com/VerusCoin/verus-typescript-primitives/pull/45",
+        "daemon_1_2_18_status": "source compatibility review only; binary interoperability not tested",
+        "verified_at": "2026-10-15",
+        "knowledge_topic": "sdk",
         "purpose": "Core data types: GenericRequest/Response, VDXF, Identity, PBaaS, Offers",
         "key_classes_new_login": [
             "GenericRequest / GenericResponse — new envelope-based request/response",
@@ -727,6 +764,9 @@ REFERENCE_LIBRARIES = {
         "package": "verusd-rpc-ts-client",
         "version": "0.1.0",
         "github": "https://github.com/VerusCoin/verusd-rpc-ts-client",
+        "verified_commit": "e8ea8c21f8a3d845e20189440dcd820d16f00891",
+        "verified_at": "2026-10-15",
+        "knowledge_topic": "sdk",
         "author": "Michael Filip Toutonghi",
         "purpose": "TypeScript RPC client for verusd daemon communication. "
                    "Used by verusid-ts-client internally for ALL RPC calls. "
@@ -761,7 +801,7 @@ REFERENCE_LIBRARIES = {
             "getCurrencyConverters(currencies) → Array<{[key]: CurrencyDefinition}>",
             "listCurrencies(query?) → Array<{currencydefinition, bestheight?, ...}>",
             "estimateConversion(amount, convertTo, via?, preConvert?, sendTo?) → {estimatedcurrencyout, ...}",
-            "sendCurrency(fromAddr, outputs) → txid string or {outputtotals, feeamount, hextx}",
+            "sendCurrency(fromAddr, outputs) → operation ID; template modes return template data; poll zGetOperationStatus for txid",
         ],
         "rpc_methods_tx": [
             "sendRawTransaction(hex) → txid",

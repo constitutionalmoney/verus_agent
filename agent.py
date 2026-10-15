@@ -34,6 +34,7 @@ from verus_agent.config import (
 from verus_agent.defi import VerusDeFiManager
 from verus_agent.ip_protection import VerusIPProtection
 from verus_agent.login import VerusLoginManager
+from verus_agent.knowledge import get_knowledge
 from verus_agent.marketplace import VerusAgentMarketplace
 from verus_agent.mcp_client import (
     MCPRouter,
@@ -647,6 +648,7 @@ class VerusBlockchainAgent:
     def _build_capability_handlers(self) -> None:
         """Build the mapping from capability strings to handler methods."""
         self._capability_handlers = {
+            "verus.knowledge.get": self._handle_knowledge_get,
             "verus.identity.get": self._handle_identity_get,
             "verus.identity.create": self._handle_identity_create,
             "verus.identity.update": self._handle_identity_update,
@@ -1751,6 +1753,10 @@ class VerusBlockchainAgent:
             "data": result.data,
             "error": result.error,
         }
+
+    async def _handle_knowledge_get(self, topic: str = "index") -> Dict[str, Any]:
+        """Read bundled public guidance; this handler performs no network IO."""
+        return get_knowledge(topic)
 
     async def _handle_mobile_capabilities(self, **_params) -> Dict[str, Any]:
         """Return the mobile capability snapshot used for developer guidance."""

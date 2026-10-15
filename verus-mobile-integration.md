@@ -1,8 +1,11 @@
 # Verus Mobile integration
 
-The current knowledge-base snapshot targets the official Android
-[`v1.1.0-14`](https://github.com/VerusCoin/Verus-Mobile/releases/tag/v1.1.0-14)
-release. See [the detailed capability record](docs/VERUS_MOBILE_V1.1.0-14.md).
+The current knowledge-base snapshot targets store release **v1.1.0-21**.
+See [the detailed implementation record](knowledge/MOBILE_V1.1.0-21.md),
+[SDK migration](knowledge/SDK_AND_PRIMITIVES.md) and
+[DREAM structure](knowledge/DREAM_APPS.md). Android store metadata confirms
+`1.1.0-21`; Apple exposes `1.1.0`. The available GitHub source baseline is
+`v1.1.0-20`, whose equivalence to store binaries has not been established.
 
 `VerusMobileHelper` is a Testnet-only, offline helper for URI and deep-link
 metadata. It does not encode the compact `GenericRequest` protocol payload,
@@ -47,9 +50,9 @@ data_packet = helper.generate_data_packet_request_link(
 ```
 
 The release identifies User Data, Data Packet, and Identity Update request
-routes as experimental. It does not establish current App Encryption support;
-the legacy helper remains blocked from task activation until device-level
-compatibility is reverified. HTTPS is required by default. The helper
+routes as experimental. Pinned upstream source also exposes experimental App
+Encryption; the local helper remains blocked from task activation until its
+privacy/device-level contract is reviewed. HTTPS is required by default. The helper
 allows HTTP only when the caller explicitly selects `allow_insecure_http=True`
 and the process sets `VERUS_MOBILE_ALLOW_INSECURE_HTTP=true` while
 `VERUS_RUNTIME_ENVIRONMENT` is `development`, `local`, or `test`. Production
