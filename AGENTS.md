@@ -123,8 +123,10 @@ prompts, test fixtures, reports, or artifacts.
 
 ## Verus Mobile
 
-- The current public snapshot is official Android `v1.1.0-14`, published
-  2026-08-25. The release page does not establish iOS parity.
+- The current store snapshot is `v1.1.0-21`, verified 2026-10-15 from live
+  Google Play metadata and the public Veruscoin announcement. Apple exposes
+  marketing version `1.1.0`; the announcement identifies build `-21`. Available
+  GitHub source remains `v1.1.0-20`. Do not assert source/store binary equality.
 - Published capabilities include Gift Cards, VerusPay V4/burn invoices,
   experimental User Data/Data Packet/Identity Update requests, encrypted
   GenericResponses, HTTPS-default response endpoints, signer selection and
@@ -133,6 +135,13 @@ prompts, test fixtures, reports, or artifacts.
   on the exact wallet build and target device.
 - Mobile helpers are Testnet-only offline wrappers for already encoded
   payloads; they do not sign, hold keys, submit writes, or simulate approval.
+- Start developer research with `knowledge/INDEX.md` or offline
+  `verus_agent.knowledge.get_knowledge`. `verus.knowledge.get` exposes these
+  bundled references as a read-only task. Preserve source/community/policy/
+  proposal labels. Knowledge does not change activation or mutation authority.
+- SDK/primitives commit pins and the 1.2.18 compatibility qualification boundary
+  are in `knowledge/SDK_AND_PRIMITIVES.md`. No full daemon interoperability was
+  tested; the runtime daemon floor remains unchanged.
 
 ## Public-content boundary
 
@@ -223,8 +232,9 @@ These tests use mocks and do not require a live daemon.
 pytest -m upstream_contract
 ```
 
-The three tests require `./verus-typescript-primitives`. All skipped is not
-validation. Active CI checks out the upstream repository first.
+The three tests require `./verus-typescript-primitives` or a checkout selected
+by `VERUS_TYPESCRIPT_PRIMITIVES_ROOT`. All skipped is not validation. Active CI
+checks out the upstream repository first.
 
 ### Testnet smoke
 

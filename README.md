@@ -89,15 +89,28 @@ Do not place approval records or secrets in `--params-json`. Mutation approval
 is supplied only by an untracked local file and must match the task ID,
 capability, network, idempotency key, RPC method, and short validity window.
 
-## Verus Mobile v1.1.0-14
+## Verus developer knowledge and Mobile v1.1.0-21
 
-The knowledge base now records official Android v1.1.0-14 Gift Cards, VerusPay
-V4/burn invoices, experimental User Data, Data Packet, and Identity Update
-requests, HTTPS response defaults, encrypted GenericResponses, and expanded
-validation. Helpers wrap already encoded Testnet payloads; they do not simulate
-wallet review or approval. See
-[`docs/VERUS_MOBILE_V1.1.0-14.md`](docs/VERUS_MOBILE_V1.1.0-14.md) and
-[`verus-mobile-integration.md`](verus-mobile-integration.md).
+The dated [knowledge index](knowledge/INDEX.md) records **Mobile v1.1.0-21**,
+SDK commit updates, primitives compatibility work relevant to daemon 1.2.18,
+DREAM application structure, bootstrap discovery, treasury simulation and the
+20 requested community discussions. Google Play confirms `1.1.0-21`; Apple
+publishes marketing version `1.1.0`. Available GitHub source remains `-20` and
+is recorded separately from store-binary evidence.
+
+Read the bundled references offline, without daemon initialization:
+
+```python
+from verus_agent.knowledge import get_knowledge
+
+reference = get_knowledge("mobile")  # index, mobile, sdk, dream, resources, community
+```
+
+The read-only `verus.knowledge.get` task capability returns the same content.
+Mobile helpers wrap already encoded Testnet payloads; they do not sign,
+simulate wallet approval, or prove on-chain completion. See
+[`verus-mobile-integration.md`](verus-mobile-integration.md). Compatibility
+research is not a claim of tested 1.2.18 interoperability or a daemon-floor change.
 
 ## Validation lanes
 
@@ -115,6 +128,9 @@ Upstream source-contract tests require a current checkout at
 ```powershell
 pytest -m upstream_contract
 ```
+
+Set `VERUS_TYPESCRIPT_PRIMITIVES_ROOT` to use a separately inspected checkout
+outside this repository without copying or linking it into the package.
 
 A zero exit with all three tests skipped is not upstream validation. Active CI
 checks out the upstream repository before running this lane. External Testnet

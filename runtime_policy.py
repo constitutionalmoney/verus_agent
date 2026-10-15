@@ -93,6 +93,7 @@ MUTATING_RPC_METHODS = frozenset(
 
 READ_ONLY_CAPABILITIES = frozenset(
     {
+        "verus.knowledge.get",
         "verus.identity.get",
         "verus.currency.estimate",
         "verus.storage.retrieve",
@@ -131,6 +132,7 @@ READ_ONLY_CAPABILITIES = frozenset(
 # require an explicit consuming-project profile.
 DEFAULT_READ_ONLY_CAPABILITIES = frozenset(
     {
+        "verus.knowledge.get",
         "verus.cli.execute",
         "verus.identity.get",
         "verus.currency.estimate",

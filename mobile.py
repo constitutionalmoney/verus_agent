@@ -1,74 +1,24 @@
-"""
-Mobile Wallet Integration Helpers — VerusPay & Verus Mobile Deep Links
+"""Offline Testnet mobile link helpers and capability metadata.
 
-Provides self-contained helper functions for generating VerusPay-compatible
-payment URIs, LoginConsentRequest QR data, and marketplace deep links that
-work with the Verus Mobile wallet and any wallet implementing VerusPay.
+Current store knowledge is Verus Mobile v1.1.0-21; the available source baseline
+is v1.1.0-20. See knowledge/MOBILE_V1.1.0-21.md and the offline knowledge reader.
 
-Architecture (from Issue #9 §6 / extends Issue #8):
-    - VerusPay URIs follow ``vrsc:`` scheme (BIP-21 style)
-    - LoginConsentRequest provides passwordless wallet-based auth
-    - Marketplace purchase links embed product + tier + price
-    - QR codes = JSON payloads (optionally base64-encoded)
+GenericRequest methods wrap an already serialized Base64URL payload. Use the
+pinned TypeScript primitives to construct typed ordinal details and the ID
+client for separately authorized application signing. Arbitrary JSON encoded
+as Base64 is not a valid GenericRequest. These helpers do not parse or sign
+binary protocol objects, render QR images, hold keys, or approve wallet actions.
+Legacy login/payment and application-specific marketplace scaffolds remain
+separate and are not evidence of current wallet interoperability.
 
-⚠️ IMPORTANT: Offline QR Code Generation & UTXO Library
-    This module generates QR **data strings** (JSON payloads). For full
-    offline QR code generation and UTXO transaction construction/signing,
-    the companion JS/TS layer MUST use the BitGo UTXO library:
+Identity Update, User Data, Data Packet and App Encryption routes are gated by
+Mobile's experimental-deeplinks setting. App Encryption remains blocked from
+local task activation. Verified source rejects tagged and Sapling invoice
+paths even though the upstream primitives can represent them.
 
-        @bitgo/utxo-lib  — https://www.npmjs.com/package/@bitgo/utxo-lib
-
-    Key usage in the QR/mobile flow:
-      - ``createUnfundedCurrencyTransfer`` from ``@bitgo/utxo-lib/smarttxs``
-      - ``networks.verus`` for Verus-specific network parameters
-      - UTXO signing for LoginConsentRequest construction
-      - The Python helpers here generate the *data payloads*; the JS/TS
-        layer converts them to actual signed QR codes via @bitgo/utxo-lib.
-
-Toggle via config:  ``VERUS_MOBILE_ENABLED=true``
-
-Mobile Wallet UI Routing (official Android v1.1.0-14 capability snapshot):
-    The Verus Mobile wallet renders **different UI pages** depending on the
-    VDXF key type in the GenericRequest ``details[]`` array:
-
-    | Detail VDXF Key                        | Wallet UI Page        | Status       |
-    |:----------------------------------------|:----------------------|:-------------|
-    | AUTHENTICATION_REQUEST_VDXF_KEY         | Login / Auth page     | ✅ Supported  |
-    | IDENTITY_UPDATE_REQUEST_VDXF_KEY        | ID Update confirm     | ✅ Supported  |
-    | VERUSPAY_INVOICE_DETAILS_VDXF_KEY       | Payment / Invoice     | ✅ Supported  |
-    | APP_ENCRYPTION_REQUEST_VDXF_KEY         | App Encryption        | Release-unverified |
-    | DATA_PACKET_REQUEST_VDXF_KEY            | Data Packet           | Experimental |
-    | USER_DATA_REQUEST_VDXF_KEY              | User Data             | Experimental |
-
-    There is NO generic catch-all page — each detail type maps to a specific
-    wallet page. Login, updateidentity, and invoices all have different UIs.
-
-VDXF Tags (vdxftag) for Payment Tracking:
-    Tagged transactions use ``getvdxfid`` + ``indexid`` to create x-addresses
-    for tracking payments (e.g., invoice IDs) without separate deposit addresses.
-
-    Example::
-
-        verus getvdxfid "yourns.vrsc::invoiceid" '{"indexid":1002}'
-        # → { "indexid": "xTevrzs5W4WyhRiCDnchF4BsdjQEF2dPRH" }
-
-        verus sendcurrency "*" '[{"address":"to@","amount":100,"vdxftag":"xTevrzs5W4WyhRiCDnchF4BsdjQEF2dPRH"}]'
-
-    - No VerusID required to use vdxftags — works with any address
-    - Supported in: sendcurrency, currency conversions, VerusPay QR codes
-    - Privacy note: tagging LINKS transactions; use separate addresses for privacy
-    Release capabilities must be verified against the target wallet build and
-    current device before use; this helper does not simulate wallet approval.
-
-References:
-    - Issue #9: VerusID as LLM/SLM Container, Security Layer & Monetization Engine
-    - Issue #8: Verus Mobile wallet integration
-    - v1.1.0-14: https://github.com/VerusCoin/Verus-Mobile/releases/tag/v1.1.0-14
-    - VerusPay: https://docs.verus.io/verusid/veruspay/
-    - LoginConsentRequest: https://docs.verus.io/verusid/loginconsentrequest/
-    - @bitgo/utxo-lib: https://www.npmjs.com/package/@bitgo/utxo-lib (QR generation)
-    - Login template: https://github.com/monkins1010/verusid-login-template
-    - verusd-rpc-ts-client: https://github.com/VerusCoin/verusd-rpc-ts-client
+No helper result proves payment, gift-card funding/claim, identity ownership,
+transaction confirmation or user consent. Runtime activation policy remains
+separate. Never log or publish gift-card links, secret material or user data.
 """
 
 from __future__ import annotations
@@ -558,7 +508,7 @@ class VerusMobileHelper:
             "detail_types": detail_types or [],
             "requires_experimental_deeplinks": bool(requires_experimental),
             "legacy_formats_still_supported": True,
-            "wallet_release": "v1.1.0-14",
+            "wallet_release": VERUS_MOBILE_WALLET_CAPABILITIES["release"]["current"],
             "wallet_review_required": True,
         }
         if legacy_fallback_uri:
@@ -599,7 +549,7 @@ class VerusMobileHelper:
         response_endpoint: str = "",
         allow_insecure_http: bool = False,
     ) -> MobileLinkResult:
-        """Wrap an already encoded v1.1.0-14 UserDataRequest payload.
+        """Wrap an already encoded UserDataRequest payload for v1.1.0-21.
 
         The wallet presents requested scopes/credential details and lets the
         user selectively respond. This helper does not build protocol payloads,
@@ -625,7 +575,7 @@ class VerusMobileHelper:
         response_endpoint: str = "",
         allow_insecure_http: bool = False,
     ) -> MobileLinkResult:
-        """Wrap an already encoded v1.1.0-14 DataPacketRequest payload."""
+        """Wrap an already encoded DataPacketRequest payload for v1.1.0-21."""
 
         result = self.generate_generic_request_link(
             compact_payload=compact_payload,
