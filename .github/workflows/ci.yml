@@ -29,6 +29,8 @@ jobs:
           python -m pip install --no-build-isolation --no-deps .
       - name: Public-content boundary
         run: python scripts/check_public_content.py
+      - name: Knowledge links and isolated wheel privacy
+        run: python scripts/check_knowledge.py --wheel
       - name: Mock-based unit and integration tests
         run: pytest tests/ -m "not upstream_contract"
       - name: Upstream source contract

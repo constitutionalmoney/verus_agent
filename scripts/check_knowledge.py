@@ -21,6 +21,14 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def validate_wheel_contents(names: set[str], expected: set[str], excluded: list[str]) -> None:
+    """Enforce package contents even when Python runs with optimization."""
+    if not expected <= names:
+        raise ValueError("Knowledge content missing from wheel")
+    if any(name.rsplit("/", 1)[-1] in excluded for name in names):
+        raise ValueError("Local-only file leaked into wheel")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--wheel", action="store_true")
@@ -53,7 +61,8 @@ def main() -> int:
     # The temporary directory is uniquely allocated and resolved before cleanup.
     with tempfile.TemporaryDirectory(prefix="verus-knowledge-wheel-") as temporary:
         stage = Path(temporary).resolve()
-        assert stage.parent == Path(tempfile.gettempdir()).resolve()
+        if stage.parent != Path(tempfile.gettempdir()).resolve():
+            raise SystemExit("Unexpected temporary build location")
         for relative in sorted(public_files):
             source = ROOT / relative
             if not source.resolve().is_relative_to(ROOT.resolve()):
@@ -78,12 +87,12 @@ def main() -> int:
             names = set(archive.namelist())
             expected = {"verus_agent/knowledge.py"}
             expected.update("verus_agent/" + p for p in public_files if p.startswith("knowledge/"))
-            assert expected <= names, "Knowledge content missing from wheel"
-            assert not any(name.rsplit("/", 1)[-1] in excluded for name in names), "Local-only file leaked"
+            validate_wheel_contents(names, expected, excluded)
             # Inspect retrieval from the zipped package, outside the source checkout.
             environment = dict(os.environ, PYTHONPATH=str(wheel))
             smoke = subprocess.run(
-                [sys.executable, "-c", "import verus_agent; assert '.whl' in verus_agent.__file__; "
+                [sys.executable, "-c", "import sys, verus_agent; "
+                 "sys.exit('Knowledge loaded outside wheel') if '.whl' not in verus_agent.__file__ else None; "
                  "from verus_agent.knowledge import KNOWLEDGE_TOPICS, get_knowledge; "
                  "[get_knowledge(t) for t in KNOWLEDGE_TOPICS]; print('All 6 wheel topics readable offline.')"],
                 cwd=stage.parent, env=environment, capture_output=True, text=True,

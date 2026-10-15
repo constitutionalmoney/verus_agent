@@ -77,3 +77,27 @@ contradictions are recorded in the catalog.
 - No wallet/device test, Testnet smoke, community-code execution, container
   build/launch, production validation, trade, blockchain mutation, merge or
   deployment occurred.
+
+## PR 5 review follow-up
+
+Review found that the new wheel/privacy checker was not a CI gate and used
+assertions which optimized Python could disable. Integrity checks now raise
+explicit errors, including the zipped-package origin check. CI runs
+`python scripts/check_knowledge.py --wheel` using its locked build environment.
+Three subprocess regressions prove missing knowledge and operator/approval
+file leaks remain failures under `python -O`.
+
+Local review validation, all exit 0:
+
+- `pytest tests/` with `VERUS_TYPESCRIPT_PRIMITIVES_ROOT` selecting the
+  inspected `3ffa9d77a3dd98c23fe4f66cf4368946906de780` checkout: **214 passed**.
+- `pytest tests/test_knowledge_validation.py tests/test_knowledge.py -q`:
+  **17 passed**.
+- `python -O scripts/check_knowledge.py --wheel`: all six wheel topics,
+  local links and private-file exclusion fixtures passed.
+- `python scripts/check_public_content.py` and `git diff --check`: passed.
+- CI YAML parsed with existing PyYAML; the knowledge-wheel step was confirmed.
+
+The local dependency-version and live-interoperability limits above remain.
+The reviewed head must pass GitHub CI before the separately authorized merge;
+the merge does not authorize deployment.
