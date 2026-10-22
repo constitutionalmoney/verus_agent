@@ -25,7 +25,8 @@ services:
       - sh
       - -lc
       - >
-          pip install --no-cache-dir --require-hashes -r verus_agent/requirements.runtime.lock &&
+          python -m pip install --no-cache-dir --upgrade pip==26.2.2 setuptools==84.0.0 &&
+          python -m pip install --no-cache-dir --require-hashes -r verus_agent/requirements.runtime.lock &&
           python -m verus_agent.agent
 
 volumes:

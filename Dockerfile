@@ -9,7 +9,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY requirements.runtime.lock ./requirements.runtime.lock
-RUN python -m pip install --no-cache-dir --require-hashes -r requirements.runtime.lock
+RUN python -m pip install --no-cache-dir --upgrade pip==26.2.2 setuptools==84.0.0 \
+    && python -m pip install --no-cache-dir --require-hashes -r requirements.runtime.lock
 
 COPY . ./verus_agent
 
