@@ -1,5 +1,5 @@
 # Standalone Testnet runtime image only. This is not a Dokploy deployment contract.
-FROM python:3.11.16-slim-bookworm@sha256:0bee7276f83efd4a1ee05bbbf4281d95ed28e079220a9457f25a93e3f1e3c31b
+FROM python:3.11.17-slim-bookworm@sha256:f06d01d4ba3f8ad5af45a3ec87df19c1d317d8e8961edc0fabda61811af6f7cf
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -9,7 +9,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY requirements.runtime.lock ./requirements.runtime.lock
-RUN python -m pip install --no-cache-dir --require-hashes -r requirements.runtime.lock
+RUN python -m pip install --no-cache-dir --upgrade pip==26.2.2 setuptools==84.0.0 \
+    && python -m pip install --no-cache-dir --require-hashes -r requirements.runtime.lock
 
 COPY . ./verus_agent
 

@@ -64,7 +64,7 @@ prompts, test fixtures, reports, or artifacts.
 - Packaging is defined by `pyproject.toml`; `uv.lock` is the complete resolver
   record. `requirements.build.lock`, `requirements.runtime.lock`, and
   `requirements.test.lock` are pip-compatible, hash-locked inputs.
-- `Dockerfile` is a pinned Python 3.11.16, non-root standalone runtime image.
+- `Dockerfile` is a pinned Python 3.11.17, non-root standalone runtime image.
   It is not a Dokploy deployment contract.
 - `VerusCLI` selects a configured local CLI binary when valid and otherwise
   uses HTTP JSON-RPC.
@@ -82,7 +82,9 @@ prompts, test fixtures, reports, or artifacts.
 - `sendcurrency` returns an operation ID. Success requires polling
   `z_getoperationstatus` to terminal success and extracting the txid.
 - UAI, MCP, marketplace, IP protection, and swarm security default off.
-- MCP requires Node.js 18+ and `npx` only when explicitly enabled.
+- MCP requires patched Node.js 22.23.4+, 24.22.1+, or 26.12.1+ within those
+  release lines, plus `npx`, only when explicitly enabled. Startup checks the
+  selected Node version and rejects older, unknown-major and prerelease builds.
 - The health server binds port `9124` and serves `/health`.
 - `docker-compose.verus-agent.yml` is standalone local/runtime Compose with no
   `build:` section.

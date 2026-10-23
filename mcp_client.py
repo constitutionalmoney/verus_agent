@@ -27,6 +27,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import shutil
 import sys
 from dataclasses import dataclass, field
@@ -34,6 +35,37 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("verus_agent.mcp")
+
+_NODE_SECURITY_FLOORS = {22: (22, 23, 4), 24: (24, 22, 1), 26: (26, 12, 1)}
+_NODE_REQUIREMENT = "MCP requires Node.js 22.23.4+, 24.22.1+, or 26.12.1+ in those release lines."
+
+
+async def _require_patched_node(env: Dict[str, str]) -> None:
+    """Check the optional MCP runtime before downloading or starting a server."""
+    node = shutil.which("node", path=env.get("PATH", os.defpath))
+    if not node:
+        raise RuntimeError(_NODE_REQUIREMENT)
+    try:
+        process = await asyncio.create_subprocess_exec(
+            node, "--version", stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL, env=env,
+        )
+    except OSError:
+        raise RuntimeError("Unable to verify the MCP Node.js runtime.") from None
+    try:
+        output, _ = await asyncio.wait_for(process.communicate(), timeout=5)
+    except asyncio.TimeoutError:
+        if process.returncode is None:
+            process.kill()
+        await process.wait()
+        raise RuntimeError("MCP Node.js version check timed out.") from None
+    match = re.fullmatch(rb"v(\d+)\.(\d+)\.(\d+)", output.strip())
+    if process.returncode != 0 or not match:
+        raise RuntimeError(_NODE_REQUIREMENT)
+    version = tuple(int(part) for part in match.groups())
+    floor = _NODE_SECURITY_FLOORS.get(version[0])
+    if floor is None or version < floor:
+        raise RuntimeError(_NODE_REQUIREMENT)
 
 
 # ---------------------------------------------------------------------------
@@ -117,13 +149,14 @@ class MCPServerConnection:
         if self.connected:
             return
 
-        npx = shutil.which("npx")
+        env = {**os.environ, **self._env}
+        npx = shutil.which("npx", path=env.get("PATH", os.defpath))
         if not npx:
             raise RuntimeError(
-                "npx not found on PATH. Install Node.js >= 18 to use MCP servers."
+                "npx not found on PATH. " + _NODE_REQUIREMENT
             )
 
-        env = {**os.environ, **self._env}
+        await _require_patched_node(env)
         try:
             self._process = await asyncio.create_subprocess_exec(
                 npx, "-y", self.package,

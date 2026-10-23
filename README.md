@@ -66,6 +66,13 @@ For development tests, use `requirements.test.lock` instead. `pyproject.toml`
 is the packaging manifest, `uv.lock` is the complete resolution record, and the
 two exported requirements files are the pip/runtime inputs.
 
+Optional MCP servers require a patched Node.js runtime and `npx` on the same
+configured PATH. `.nvmrc` selects 22.23.4; supported security floors are 22.23.4,
+24.22.1 and 26.12.1 within their respective release lines. Startup rejects older,
+unknown-major and prerelease builds before starting an MCP server. These floors
+address the [October 2026 Node.js security release](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases)
+and must be reviewed for later security releases. MCP remains disabled by default.
+
 ## Read-only runner
 
 The smoke command initializes the agent and calls `getinfo` on an external
