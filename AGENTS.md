@@ -64,7 +64,7 @@ prompts, test fixtures, reports, or artifacts.
 - Packaging is defined by `pyproject.toml`; `uv.lock` is the complete resolver
   record. `requirements.build.lock`, `requirements.runtime.lock`, and
   `requirements.test.lock` are pip-compatible, hash-locked inputs.
-- `Dockerfile` is a pinned Python 3.11.16, non-root standalone runtime image.
+- `Dockerfile` is a pinned Python 3.11.17, non-root standalone runtime image.
   It is not a Dokploy deployment contract.
 - `VerusCLI` selects a configured local CLI binary when valid and otherwise
   uses HTTP JSON-RPC.
