@@ -1,7 +1,7 @@
 # Verus Mobile v1.1.0-14 capability snapshot
 
 Historical release record. Current store knowledge and pinned implementation
-guidance are in [Mobile v1.1.0-21](../knowledge/MOBILE_V1.1.0-21.md).
+guidance are in the [Mobile knowledge index](../knowledge/INDEX.md).
 
 Source fact verified 2026-08-26: the official Android release
 [`v1.1.0-14`](https://github.com/VerusCoin/Verus-Mobile/releases/tag/v1.1.0-14)

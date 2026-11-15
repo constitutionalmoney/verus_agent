@@ -96,21 +96,21 @@ Do not place approval records or secrets in `--params-json`. Mutation approval
 is supplied only by an untracked local file and must match the task ID,
 capability, network, idempotency key, RPC method, and short validity window.
 
-## Verus developer knowledge and Mobile v1.1.0-21
+## Verus developer knowledge and Mobile v1.1.1
 
-The dated [knowledge index](knowledge/INDEX.md) records **Mobile v1.1.0-21**,
-SDK commit updates, primitives compatibility work relevant to daemon 1.2.18,
-DREAM application structure, bootstrap discovery, treasury simulation and the
-20 requested community discussions. Google Play confirms `1.1.0-21`; Apple
-publishes marketing version `1.1.0`. Available GitHub source remains `-20` and
-is recorded separately from store-binary evidence.
+The [knowledge index](knowledge/INDEX.md) and [Mobile v1.1.1 guide](knowledge/MOBILE_V1.1.1.md)
+cover VerusID registration, transfer, management, linking, local encryption
+and RPC batching for the GitHub APK and announced iOS TestFlight release.
+The separate October store baseline remains `v1.1.0-21` (Google Play);
+Apple publishes marketing version `1.1.0`. The knowledge also covers SDK pins,
+daemon compatibility, DREAM apps, bootstraps, treasury and community projects.
 
 Read the bundled references offline, without daemon initialization:
 
 ```python
 from verus_agent.knowledge import get_knowledge
 
-reference = get_knowledge("mobile")  # index, mobile, sdk, dream, resources, community
+reference = get_knowledge("mobile")  # use "mobile_store" for the October snapshot
 ```
 
 The read-only `verus.knowledge.get` task capability returns the same content.

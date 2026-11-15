@@ -94,7 +94,8 @@ def main() -> int:
                 [sys.executable, "-c", "import sys, verus_agent; "
                  "sys.exit('Knowledge loaded outside wheel') if '.whl' not in verus_agent.__file__ else None; "
                  "from verus_agent.knowledge import KNOWLEDGE_TOPICS, get_knowledge; "
-                 "[get_knowledge(t) for t in KNOWLEDGE_TOPICS]; print('All 6 wheel topics readable offline.')"],
+                 "[get_knowledge(t) for t in KNOWLEDGE_TOPICS]; "
+                 "print(f'All {len(KNOWLEDGE_TOPICS)} wheel topics readable offline.')"],
                 cwd=stage.parent, env=environment, capture_output=True, text=True,
             )
             if smoke.returncode:

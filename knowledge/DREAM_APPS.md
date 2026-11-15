@@ -1,6 +1,7 @@
 # Structuring Verus DREAM applications
 
-Checked 2026-10-15. Source facts come from the official
+Architecture checked 2026-10-15; wallet integration notes refreshed
+2026-11-15. Source facts come from the official
 [DREAM model](https://verus.io/dream), [developer start page](https://verus.io/build/start),
 and the pinned libraries in [SDK and primitives](SDK_AND_PRIMITIVES.md).
 
@@ -62,18 +63,20 @@ update an identity, and delegate authority.
 The pinned ID client `verifyGenericResponse` verifies the signed envelope but
 does not implement this app's outstanding-session/consumption policy. In
 Mobile, response correlation uses `request.getRawDataSha256()`. See the
-[mobile response guide](MOBILE_V1.1.0-21.md) for binary delivery, signing and
-encryption boundaries.
+[v1.1.1 guide](MOBILE_V1.1.1.md) for current build-specific review and upload
+behavior and the [October response guide](MOBILE_V1.1.0-21.md) for the earlier
+binary delivery, signing and encryption reference.
 
 ## Feature design choices
 
 | Use case | Suggested starting point | Additional contract |
 |---|---|---|
 | Sign in | Authentication detail and HTTPS callback | Identity/network policy, short-lived session, replay prevention |
-| Encrypted app vault | Authentication plus App Encryption | Derivation scope, local key custody, encrypted response, backup/recovery UX; local agent task activation currently blocked |
+| Encrypted app vault | Signed App Encryption, with a typed Authentication detail when recipient constraints are needed | Verify scope and current/signing-height authority as applicable; device-local derivation and encrypted response required; local agent task activation blocked |
 | Credential collection | Scoped User Data request | CREDENTIAL/FULL_DATA subset, selective disclosure, encryption, credential validity and requested signer |
 | Statement approval | Data Packet request | Review each statement/object, exact byte hash, signer and each returned signature |
 | User-owned content update | Identity Update detail | Current UTXO, intended map preservation, namespace/authority checks, serial writes, confirmation/readback |
+| Register or transfer a VerusID | Native wallet ceremony in v1.1.1 | Registration needs separate commitment/confirmation/reveal; transfer needs control and funds review. Neither is a new general-purpose app deeplink or agent capability. |
 | Invoice | VerusPay V4 detail | Currency/network/expiry/destination checks, separate payment receipt and confirmation |
 | Onboarding gift | Wallet-created gift card/backup flow | Bearer secret custody, funded/claimed state, wallet approval, NFC capacity and backup verification |
 

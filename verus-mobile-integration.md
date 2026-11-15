@@ -1,11 +1,13 @@
 # Verus Mobile integration
 
-The current knowledge-base snapshot targets store release **v1.1.0-21**.
-See [the detailed implementation record](knowledge/MOBILE_V1.1.0-21.md),
-[SDK migration](knowledge/SDK_AND_PRIMITIVES.md) and
-[DREAM structure](knowledge/DREAM_APPS.md). Android store metadata confirms
-`1.1.0-21`; Apple exposes `1.1.0`. The available GitHub source baseline is
-`v1.1.0-20`, whose equivalence to store binaries has not been established.
+Start with the [v1.1.1 implementation guide](knowledge/MOBILE_V1.1.1.md)
+for the Android GitHub APK and announced iOS TestFlight release. It covers
+native registration, modification, transfer and linking, local upload
+encryption, App Encryption authentication and read batching. The [October
+store guide](knowledge/MOBILE_V1.1.0-21.md) preserves the `v1.1.0-21` evidence
+and protocol examples. See also [SDK migration](knowledge/SDK_AND_PRIMITIVES.md)
+and [DREAM structure](knowledge/DREAM_APPS.md). Treat each distribution
+channel and installed build separately.
 
 `VerusMobileHelper` is a Testnet-only, offline helper for URI and deep-link
 metadata. It does not encode the compact `GenericRequest` protocol payload,

@@ -1,7 +1,7 @@
 """Offline Testnet mobile link helpers and capability metadata.
 
-Current store knowledge is Verus Mobile v1.1.0-21; the available source baseline
-is v1.1.0-20. See knowledge/MOBILE_V1.1.0-21.md and the offline knowledge reader.
+See knowledge/MOBILE_V1.1.1.md for the latest tester release and
+knowledge/MOBILE_V1.1.0-21.md for the separate October store snapshot.
 
 GenericRequest methods wrap an already serialized Base64URL payload. Use the
 pinned TypeScript primitives to construct typed ordinal details and the ID
@@ -549,7 +549,7 @@ class VerusMobileHelper:
         response_endpoint: str = "",
         allow_insecure_http: bool = False,
     ) -> MobileLinkResult:
-        """Wrap an already encoded UserDataRequest payload for v1.1.0-21.
+        """Wrap an already encoded UserDataRequest payload.
 
         The wallet presents requested scopes/credential details and lets the
         user selectively respond. This helper does not build protocol payloads,
@@ -575,7 +575,7 @@ class VerusMobileHelper:
         response_endpoint: str = "",
         allow_insecure_http: bool = False,
     ) -> MobileLinkResult:
-        """Wrap an already encoded DataPacketRequest payload for v1.1.0-21."""
+        """Wrap an already encoded DataPacketRequest payload."""
 
         result = self.generate_generic_request_link(
             compact_payload=compact_payload,

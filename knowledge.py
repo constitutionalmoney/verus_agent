@@ -8,15 +8,17 @@ from importlib.resources import files
 from typing import Any
 
 
-KNOWLEDGE_AS_OF = "2026-10-15"
+KNOWLEDGE_AS_OF = "2026-11-15"
 KNOWLEDGE_TOPICS = {
     "index": "INDEX.md",
-    "mobile": "MOBILE_V1.1.0-21.md",
+    "mobile": "MOBILE_V1.1.1.md",
+    "mobile_store": "MOBILE_V1.1.0-21.md",
     "sdk": "SDK_AND_PRIMITIVES.md",
     "dream": "DREAM_APPS.md",
     "resources": "BOOTSTRAP_AND_TREASURY.md",
     "community": "COMMUNITY_PROJECTS.md",
 }
+_OCTOBER_TOPICS = frozenset({"mobile_store", "resources", "community"})
 
 
 def get_knowledge(topic: str = "index") -> dict[str, Any]:
@@ -27,7 +29,7 @@ def get_knowledge(topic: str = "index") -> dict[str, Any]:
     content = files("verus_agent").joinpath("knowledge", filename).read_text(encoding="utf-8")
     return {
         "topic": topic,
-        "as_of": KNOWLEDGE_AS_OF,
+        "as_of": "2026-10-15" if topic in _OCTOBER_TOPICS else KNOWLEDGE_AS_OF,
         "path": "knowledge/" + filename,
         "topics": list(KNOWLEDGE_TOPICS),
         "content": content,
