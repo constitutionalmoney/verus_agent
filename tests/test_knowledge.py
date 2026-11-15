@@ -13,7 +13,6 @@ from verus_agent.mobile import VerusMobileHelper
 @pytest.mark.parametrize("topic", KNOWLEDGE_TOPICS)
 def test_bundled_topics_are_readable(topic):
     result = get_knowledge(topic)
-    assert result["as_of"] == "2026-10-15"
     assert result["content"].startswith("# ")
     assert "https://" in result["content"] or topic == "index"
 
@@ -27,10 +26,16 @@ def test_reader_rejects_paths_urls_and_unknown_topics(topic):
 def test_release_channels_are_distinct_and_links_use_current_release():
     helper = VerusMobileHelper()
     release = helper.get_mobile_capabilities()["release"]
-    assert release["current"] == "v1.1.0-21"
+    assert release["current"] == release["android_apk"] == "v1.1.1"
+    assert release["store_current"] == "v1.1.0-21"
     assert release["android_store_version"] == "1.1.0-21"
     assert release["ios_marketing_version"] == "1.1.0"
-    assert release["android_apk"] == "v1.1.0-20"
+    assert release["ios_testflight"] == "v1.1.1"
+    assert get_knowledge("mobile")["as_of"] == "2026-11-15"
+    store = get_knowledge("mobile_store")
+    assert store["as_of"] == "2026-10-15"
+    assert store["content"].splitlines()[0] == "# Verus Mobile v1.1.0-21"
+    assert helper.get_mobile_capabilities()["knowledge"]["path"] == get_knowledge("mobile")["path"]
     assert helper.generate_generic_request_link("synthetic-payload").data["wallet_release"] == release["current"]
 
 
@@ -44,7 +49,7 @@ async def test_knowledge_dispatch_needs_no_wallet_or_daemon_initialization():
         "params": {"topic": "mobile"},
     })
     assert result.success is True
-    assert "# Verus Mobile v1.1.0-21" in result.result["content"]
+    assert result.result["content"].splitlines()[0] == "# Verus Mobile v1.1.1"
 
 
 @pytest.mark.asyncio

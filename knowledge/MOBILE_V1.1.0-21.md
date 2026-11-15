@@ -1,6 +1,8 @@
 # Verus Mobile v1.1.0-21
 
-Checked 2026-10-15. **Latest store release: v1.1.0-21.**
+October store snapshot, checked 2026-10-15. **Store release: v1.1.0-21.**
+For the newer GitHub APK and announced TestFlight release, see
+[Mobile v1.1.1](MOBILE_V1.1.1.md).
 
 ## Release evidence
 
@@ -9,12 +11,12 @@ Checked 2026-10-15. **Latest store release: v1.1.0-21.**
 | Google Play | Live [official listing](https://play.google.com/store/apps/details?hl=en&id=org.autonomoussoftwarefoundation.verusmobile.android) HTML contains `1.1.0-21`; updated 2026-10-12. Search-engine cached pages can show older notes. |
 | Apple | [App Store](https://apps.apple.com/us/app/verus-mobile/id6447361908) and [lookup metadata](https://itunes.apple.com/lookup?id=6447361908&country=us) expose marketing version `1.1.0`, release time `2026-10-12T19:45:54Z`, minimum iOS 15.1. The public metadata does not expose build suffix `-21`. |
 | Announcement | [Veruscoin Announcements](https://t.me/TruthAndPrivacyForAll/422) explicitly names `v1.1.0-21` for both stores and matches the supplied announcement. |
-| GitHub source | Latest [APK release v1.1.0-20](https://github.com/VerusCoin/Verus-Mobile/releases/tag/v1.1.0-20), published 2026-10-07, commit `e659a1c6aa17ebe633e3c66c79091594dda1454b`. No `-21` GitHub release was found. |
+| GitHub source | The October baseline was [APK release v1.1.0-20](https://github.com/VerusCoin/Verus-Mobile/releases/tag/v1.1.0-20), published 2026-10-07, commit `e659a1c6aa17ebe633e3c66c79091594dda1454b`. No `-21` GitHub release was found. |
 
 Implementation references below use that available `-20` commit. This does
 not establish that it reproduces either `-21` store binary. Later master
 `25515ffce77ca6b563d0456d4b1198039f6d347f` adds iOS UIScene lifecycle migration.
-The [source lockfile](https://github.com/VerusCoin/Verus-Mobile/blob/e659a1c6aa17ebe633e3c66c79091594dda1454b/pnpm-lock.yaml)
+The October [source lockfile](https://github.com/VerusCoin/Verus-Mobile/blob/e659a1c6aa17ebe633e3c66c79091594dda1454b/pnpm-lock.yaml)
 pins primitives `3ffa9d77a3dd98c23fe4f66cf4368946906de780`, ID client
 `933e8f8da1a51b99ba7533701dddb9914b7a06b7`, and RPC client
 `e8ea8c21f8a3d845e20189440dcd820d16f00891`.

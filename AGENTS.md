@@ -125,10 +125,15 @@ prompts, test fixtures, reports, or artifacts.
 
 ## Verus Mobile
 
-- The current store snapshot is `v1.1.0-21`, verified 2026-10-15 from live
-  Google Play metadata and the public Veruscoin announcement. Apple exposes
-  marketing version `1.1.0`; the announcement identifies build `-21`. Available
-  GitHub source remains `v1.1.0-20`. Do not assert source/store binary equality.
+- The latest GitHub release is `v1.1.1` (Android APK and announced iOS
+  TestFlight testing release). On 2026-11-15 Google Play still exposed
+  `1.1.0-21` and Apple exposed public marketing version `1.1.0`; the October
+  announcement identifies store build `-21`. Do not assert source/store
+  binary equality or device validation.
+- Read [the v1.1.1 guide](knowledge/MOBILE_V1.1.1.md) for registration,
+  identity management/transfer/linking, staged review, local upload
+  encryption, App Encryption authentication, and RPC batching. The
+  [October store guide](knowledge/MOBILE_V1.1.0-21.md) remains available.
 - Published capabilities include Gift Cards, VerusPay V4/burn invoices,
   experimental User Data/Data Packet/Identity Update requests, encrypted
   GenericResponses, HTTPS-default response endpoints, signer selection and

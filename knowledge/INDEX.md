@@ -1,11 +1,13 @@
 # Verus developer knowledge
 
-Evidence checked 2026-10-15. This is a curated reference snapshot, not a
-training claim, live discovery service, or authorization to operate a wallet.
+Mobile and related SDK guidance refreshed 2026-11-15. Other topics retain
+their dated evidence. This is a curated reference, not a live discovery
+service or authorization to operate a wallet.
 
 | Topic | Reference | Purpose |
 |---|---|---|
-| `mobile` | [Mobile v1.1.0-21](MOBILE_V1.1.0-21.md) | Store release, typed deeplinks, review, encryption, gift cards, supported subsets |
+| `mobile` | [Mobile v1.1.1](MOBILE_V1.1.1.md) | Tester release, VerusID lifecycle, local uploads, App Encryption authentication, read batching |
+| `mobile_store` | [Mobile v1.1.0-21](MOBILE_V1.1.0-21.md) | October store snapshot, typed deeplinks, responses, gift cards and supported subsets |
 | `sdk` | [SDK and primitives](SDK_AND_PRIMITIVES.md) | Commit pins, daemon 1.2.18 compatibility work, migration and validation gaps |
 | `dream` | [DREAM apps](DREAM_APPS.md) | Request lifecycle and a proposed application structure |
 | `resources` | [Bootstrap and treasury](BOOTSTRAP_AND_TREASURY.md) | Browser bootstrap discovery and explicitly simulated economics |
@@ -33,10 +35,11 @@ Evidence labels used throughout:
 - **Proposal/inference:** a suggested integration design, not an upstream guarantee.
 - **Unverified/unavailable:** an explicit gap, not proof of absence.
 
-The recorded latest store release is **v1.1.0-21**. Android's live store
-metadata confirms `1.1.0-21`; Apple exposes marketing version `1.1.0`. The
-available GitHub source tag is `v1.1.0-20`; no claim equates that source tree
-with the `-21` store binary.
+The latest GitHub release is **v1.1.1**, available as an Android APK and
+announced for iOS TestFlight. As of November 15, Google Play still shows
+`1.1.0-21` and Apple shows public marketing version `1.1.0`. The October
+store notes use GitHub source `v1.1.0-20`. None of these source references
+establish binary equivalence or device-level acceptance.
 
 Keep all current activation and per-mutation approval controls. Examples use
 synthetic values. Nothing here activates App Encryption, funds or claims a

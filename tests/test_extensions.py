@@ -1174,8 +1174,9 @@ class TestMobileWallet:
 
     def test_mobile_capability_snapshot(self, helper):
         caps = helper.get_mobile_capabilities()
-        assert caps["release"]["current"] == "v1.1.0-21"
-        assert caps["release"]["android_apk"] == "v1.1.0-20"
+        assert caps["release"]["current"] == "v1.1.1"
+        assert caps["release"]["android_apk"] == "v1.1.1"
+        assert "AppEncryptionRequest" in caps["deeplinks"]["local_task_activation_blocked_for"]
         assert caps["deeplinks"]["preferred_format"] == "verus://1/<compact_payload>"
         assert caps["generic_request_details"]["identity_update_request"] == "supported_experimental"
 

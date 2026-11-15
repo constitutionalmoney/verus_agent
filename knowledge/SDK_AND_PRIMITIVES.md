@@ -1,7 +1,41 @@
 # SDK commits and VerusCoin 1.2.18 compatibility work
 
-Public source inspected 2026-10-15. Full commits identify this snapshot; the
-clients retain old manifest version numbers despite substantial changes.
+Mobile v1.1.1 dependencies reviewed 2026-11-15. The October source and daemon
+compatibility record follows below. Prefer full commit pins to package labels.
+
+## Mobile v1.1.1 dependency set
+
+The tagged [manifest](https://github.com/VerusCoin/Verus-Mobile/blob/d82d0e8ea457979778a857c9812b7aa29ebd0410/package.json)
+and [lockfile](https://github.com/VerusCoin/Verus-Mobile/blob/d82d0e8ea457979778a857c9812b7aa29ebd0410/pnpm-lock.yaml)
+agree on these versions. They are the wallet's source pins, not an assertion
+about current library branch heads or independently qualified store binaries.
+
+| Component | Mobile v1.1.1 pin | Integration use |
+|---|---|---|
+| VerusID client | [`e18701f69153c9eb81927a5c9dfff794bc974a26`](https://github.com/VerusCoin/verusid-ts-client/commit/e18701f69153c9eb81927a5c9dfff794bc974a26) | Reservation and registration construction, verification and signing; local crypto adapter for typed identity uploads. The pinned commit revises referral verification. |
+| RPC client | [`f3dcd552d6940422e875f8f657ee3d8e2097b37b`](https://github.com/VerusCoin/verusd-rpc-ts-client/commit/f3dcd552d6940422e875f8f657ee3d8e2097b37b) | Match the new primitives. Pair with Mobile's read-specific VRPC planner/batcher rather than assuming arbitrary daemon batch support. |
+| Primitives | [`d5e3068021cfa83e3aae489403f4d63aad0c1a6c`](https://github.com/VerusCoin/verus-typescript-primitives/commit/d5e3068021cfa83e3aae489403f4d63aad0c1a6c) | Typed registration, namespace and cost rules, revised App Encryption request fields. |
+
+[Registration fixtures](https://github.com/VerusCoin/verus-typescript-primitives/blob/d5e3068021cfa83e3aae489403f4d63aad0c1a6c/src/__tests__/fixtures/identity-registration/README.md)
+document daemon-derived parity coverage for names, reservations, identities,
+registration policies and read responses. Use them as a reference for
+synthetic offline tests; do not copy historical commitments or chain data into
+this project. No daemon round trip or SDK JavaScript suite was run here.
+
+For [App Encryption request bytes](https://github.com/VerusCoin/verus-typescript-primitives/blob/d5e3068021cfa83e3aae489403f4d63aad0c1a6c/src/vdxf/classes/appencryption/AppEncryptionRequestDetails.ts),
+the primary derivation number is mandatory on the wire; optional
+`derivationID` is followed by `secondaryDerivationNumber` (defaults to zero).
+The detail's response-encryption address is distinct from the derived channel
+address. Primitives permit an omitted response-encryption address, but Mobile
+requires it. Verify fixed-byte fixtures for your exact version; do not
+reinterpret or reserialize historic signed envelopes to migrate them. See
+[the v1.1.1 guide](MOBILE_V1.1.1.md) for wallet checks and implementation paths.
+
+## October source and daemon baseline
+
+Public source inspected 2026-10-15. The clients retain old manifest version
+numbers despite substantial changes. This section preserves the October
+pins and daemon evidence; it is not the v1.1.1 dependency set.
 
 | Component | Branch / package version | Commit |
 |---|---|---|

@@ -163,33 +163,38 @@ VERUSPAY_DEEP_LINK_SCHEME = "i5jtwbp6zymeay9llnraglgjqgdrffsau4"
 WALLET_ENVIRONMENTS = ["extension", "mobile", "desktop"]
 
 # ---------------------------------------------------------------------------
-# Verus Mobile store release v1.1.0-21, checked 2026-10-15. Available GitHub
-# source remains v1.1.0-20; do not equate that tree with the store binary.
+# Verus Mobile release channels checked 2026-11-15. The v1.1.1 tester
+# release and the v1.1.0-21 public store baseline are distinct.
 # ---------------------------------------------------------------------------
 # Used by the agent to guide app developers on when mobile can replace
 # desktop workflows.
 VERUS_MOBILE_WALLET_CAPABILITIES = {
     "release": {
-        "current": "v1.1.0-21",
-        "verified_at": "2026-10-15",
+        "current": "v1.1.1",
+        "verified_at": "2026-11-15",
+        "current_channel": "Android GitHub APK and announced iOS TestFlight testing release",
+        "store_current": "v1.1.0-21",
         "store_release_date": "2026-10-12",
         "android_store_version": "1.1.0-21",
         "android_store_source": "https://play.google.com/store/apps/details?hl=en&id=org.autonomoussoftwarefoundation.verusmobile.android",
         "ios_marketing_version": "1.1.0",
         "ios_source": "https://apps.apple.com/us/app/verus-mobile/id6447361908",
-        "announcement_source": "https://t.me/TruthAndPrivacyForAll/422",
-        "ios_status": "announcement identifies build -21; public Apple metadata exposes 1.1.0 only",
-        "android_apk": "v1.1.0-20",
-        "published_at": "2026-10-07",
-        "tag_commit": "e659a1c6aa17ebe633e3c66c79091594dda1454b",
-        "source": "https://github.com/VerusCoin/Verus-Mobile/releases/tag/v1.1.0-20",
-        "source_binary_equivalence": "not established for store build -21",
+        "announcement_source": "https://github.com/VerusCoin/Verus-Mobile/releases/tag/v1.1.1",
+        "store_announcement_source": "https://t.me/TruthAndPrivacyForAll/422",
+        "ios_status": "public Apple metadata exposes 1.1.0; October announcement identifies build -21",
+        "ios_testflight": "v1.1.1",
+        "ios_testflight_status": "announced; availability and installed build not independently verified",
+        "android_apk": "v1.1.1",
+        "published_at": "2026-11-15",
+        "tag_commit": "d82d0e8ea457979778a857c9812b7aa29ebd0410",
+        "source": "https://github.com/VerusCoin/Verus-Mobile/releases/tag/v1.1.1",
+        "source_binary_equivalence": "not independently established for APK, TestFlight or public store binaries",
     },
     "shielded_support": {
-        "source_status": "legacy guidance; not reverified by v1.1.0-14 release notes",
+        "source_status": "legacy private-transaction guidance; no v1.1.1 device validation",
         "android_private_transactions": True,
         "ios_private_transactions": True,
-        "feature_parity_ios_android": True,
+        "feature_parity_ios_android": None,
         "requirements": [
             "Configured Z seed (24-word mnemonic or Sapling spending key)",
             "Shielded sync complete before spending",
@@ -255,10 +260,22 @@ VERUS_MOBILE_WALLET_CAPABILITIES = {
         "user_data": "signed CREDENTIAL/FULL_DATA request; response encryption required; hash-buffer search keys",
         "data_packet": "signed FLAG_FOR_USERS_SIGNATURE request; strings/DataDescriptor objects; transmittal-to-user rejected",
         "invoice": "V4 detail in GenericRequest; matching Testnet flag; tagged/Sapling destinations rejected by pinned mobile source",
-        "identity_update": "current identity UTXO distinct from aggregated history; wallet review and confirmation required",
+        "identity_update": "current identity UTXO distinct from aggregated history; staged review, local upload encryption and verified funding",
+    },
+    "tester_release_updates": {
+        "registration": "separately reviewed name commitment and registration; namespace and referral checks, wallet private address when available, resumable local progress",
+        "identity_management": "edit controllers, threshold, recovery, revocation and private address against the current identity output",
+        "identity_transfer": "same-chain recipient; review resulting authorities and funds staying or returning to wallet",
+        "identity_linking": "discover by wallet address, verify eligibility, link selected identities locally",
+        "identity_update_review": "separate content and authority changes, publication and removal warnings, and final fee review",
+        "identity_uploads": "wallet-local authenticated descriptor construction; no plaintext uploads to remote RPC",
+        "app_encryption": "signed envelope, explicit scope ownership and selected identity checks; encrypted response; agent task remains blocked",
+        "rpc_performance": "deduplicate refresh reads per system; batch independent allowlisted reads without merging per-address balance totals",
+        "ui_and_lifecycle": "revoke/recover, manual versus background loading, profile switching, reason-specific login, profile-scoped notifications, PBaaS resolution and control labels",
+        "agent_execution": "reference only; no new capability, wallet authority or RPC permission",
     },
     "store_updates": ["navigation and animation performance", "identity state change and legacy login display fixes", "Android 16 KB page-size support"],
-    "knowledge": {"capability": "verus.knowledge.get", "topic": "mobile", "path": "knowledge/MOBILE_V1.1.0-21.md"},
+    "knowledge": {"capability": "verus.knowledge.get", "topic": "mobile", "path": "knowledge/MOBILE_V1.1.1.md"},
     "validation_expansion": [
         "RPC",
         "currency",
